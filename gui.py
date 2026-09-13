@@ -66,6 +66,11 @@ class App(tk.Frame):
         master.title("Haldor")
         master.minsize(560, 520)
         master.configure(bg=BG)
+        # The title bar is the system's, and follows the system appearance unless
+        # asked not to. A terminal keeps its dark chrome in a light Mac, so does this.
+        with contextlib.suppress(tk.TclError):
+            master.tk.call("::tk::unsupported::MacWindowStyle", "appearance",
+                           master, "darkaqua")
         self.pack(fill="both", expand=True)
 
         head = tk.Frame(self)
