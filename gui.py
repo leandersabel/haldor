@@ -2,6 +2,7 @@
 """A window for Haldor: keep the mod list, install it, launch the game."""
 
 import contextlib
+import io
 import queue
 import subprocess
 import threading
@@ -15,7 +16,7 @@ PAD = 16
 SOURCE = urllib.parse.urlsplit(haldor.API).hostname
 
 
-class Relay:
+class Relay(io.TextIOBase):
     """Stands in for stdout while a job runs, handing its text to the window."""
 
     def __init__(self, out: queue.Queue):
@@ -25,9 +26,6 @@ class Relay:
         self.out.put(text)
         return len(text)
 
-    def flush(self) -> None:
-        pass
-
 
 class App(ttk.Frame):
     """The mod list on top, what Haldor is saying below."""
@@ -36,6 +34,7 @@ class App(ttk.Frame):
         super().__init__(master, padding=PAD)
         self.messages: queue.Queue = queue.Queue()
         self.game = None
+        self.failure = None
         self.pack = tk.StringVar()
         self.status = tk.StringVar()
 
@@ -49,9 +48,8 @@ class App(ttk.Frame):
         self.rowconfigure(8, weight=2)
 
         ttk.Label(self, text="Source").grid(row=0, column=0, sticky="w")
-        # Everything below is named the way one index names it, and there is only
-        # the one. The list says so, reading the host off the API Haldor calls so
-        # the two cannot drift apart.
+        # Thunderstore is the only index Haldor reads. The host comes off the
+        # API so the list cannot drift from it.
         source = ttk.Combobox(self, values=[SOURCE], state="readonly", width=16)
         source.current(0)
         source.grid(row=1, column=0, sticky="w", pady=(4, PAD))
@@ -61,8 +59,8 @@ class App(ttk.Frame):
         entry.grid(row=3, column=0, sticky="ew", pady=(4, PAD))
 
         ttk.Label(self, text="Extras, one namespace/name per line").grid(row=4, column=0, sticky="w")
-        self.extras = self.text(row=5, height=5)
-        self.extras.grid(pady=(4, PAD))
+        self.extras = self.text(height=5)
+        self.extras.grid(row=5, column=0, sticky="nsew", pady=(4, PAD))
 
         bar = ttk.Frame(self)
         bar.grid(row=6, column=0, sticky="ew")
@@ -73,22 +71,19 @@ class App(ttk.Frame):
         self.launch.grid(row=0, column=2)
 
         ttk.Separator(self).grid(row=7, column=0, sticky="ew", pady=PAD)
-        self.console = self.text(row=8, height=10, wrap="word",
+        self.console = self.text(height=10, wrap="word",
                                  font="TkFixedFont", state="disabled")
+        self.console.grid(row=8, column=0, sticky="nsew")
         ttk.Label(self, textvariable=self.status).grid(row=9, column=0, sticky="w", pady=(PAD, 0))
 
         entry.focus_set()
         self.load()
         self.pump()
 
-    def text(self, row: int, **kw) -> tk.Text:
+    def text(self, **kw) -> tk.Text:
         """A text box that sits flat in the layout."""
-        box = tk.Text(self, relief="flat", padx=8, pady=6,
-                      highlightthickness=1, **kw)
-        box.grid(row=row, column=0, sticky="nsew")
-        return box
-
-    # What the window knows
+        return tk.Text(self, relief="flat", padx=8, pady=6,
+                       highlightthickness=1, **kw)
 
     def load(self) -> None:
         """Fill the list from the install, if there is one."""
@@ -106,18 +101,15 @@ class App(ttk.Frame):
         self.say("\n".join(installed["mods"]) + "\n")
         self.status.set("Ready")
 
-    def wanted(self) -> tuple[str, list[str]]:
-        lines = self.extras.get("1.0", "end").split()
-        return self.pack.get().strip(), lines
-
     # What the buttons do
 
     def do_install(self) -> None:
-        pack, extras = self.wanted()
+        pack = self.pack.get().strip()
         if not pack:
             return self.status.set("Name a modpack, such as MahMods/Trollheim")
-        self.clear()
-        self.work("Installing", lambda: haldor.install(pack, extras))
+        # Read the list here. The worker thread must not touch a widget.
+        extras = self.extras.get("1.0", "end").split()
+        self.work(lambda: haldor.install(pack, extras))
 
     def do_play(self) -> None:
         script = self.game / "run_bepinex.sh"
@@ -135,16 +127,23 @@ class App(ttk.Frame):
 
     # Running a job without freezing the window
 
-    def work(self, label: str, job) -> None:
-        self.busy(True, f"{label}…")
+    def work(self, job) -> None:
+        """Run the job off the main thread, its output replacing the console."""
+        self.busy(True, "Installing…")
+        self.failure = None
+        self.console.configure(state="normal")
+        self.console.delete("1.0", "end")
+        self.console.configure(state="disabled")
 
         def run() -> None:
+            relay = Relay(self.messages)
             try:
-                with contextlib.redirect_stdout(Relay(self.messages)):
+                with contextlib.redirect_stdout(relay):
                     job()
-                self.messages.put((None,))
             except (Exception, SystemExit) as e:
-                self.messages.put((f"{type(e).__name__}: {e}",))
+                self.failure = f"{type(e).__name__}: {e}"
+                relay.write(self.failure + "\n")
+            self.messages.put(None)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -155,13 +154,10 @@ class App(ttk.Frame):
                 message = self.messages.get_nowait()
             except queue.Empty:
                 break
-            if isinstance(message, str):
-                self.say(message)
+            if message is None:
+                self.busy(False, self.failure or "Ready")
             else:
-                failure, = message
-                self.busy(False, failure or "Ready")
-                if failure:
-                    self.say(failure + "\n")
+                self.say(message)
         self.after(100, self.pump)
 
     # Chrome
@@ -175,11 +171,6 @@ class App(ttk.Frame):
         self.console.configure(state="normal")
         self.console.insert("end", text)
         self.console.see("end")
-        self.console.configure(state="disabled")
-
-    def clear(self) -> None:
-        self.console.configure(state="normal")
-        self.console.delete("1.0", "end")
         self.console.configure(state="disabled")
 
 

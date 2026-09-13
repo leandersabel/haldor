@@ -1,7 +1,6 @@
 # Native arm64
 
-Haldor runs Valheim on the Apple Silicon slice with no translation layer. Getting
-there needed one change to BepInEx, recorded here.
+Haldor runs Valheim on the Apple Silicon slice. That needs one change to BepInEx.
 
 ## Why stock BepInEx cannot do it
 
@@ -30,7 +29,7 @@ Doorstop, the launcher script and every mod are upstream and unmodified.
 Most of the core comes verbatim from the pinned packages. The assemblies built from
 source differ from the shipped copies only in PE timestamp, MVID and debug directory.
 
-The patch is 11 files, +103/-347:
+The patch:
 
 - `PlatformCompat.cs` reimplements `PlatformHelper` and `Platform` on MonoMod 25's
   `PlatformDetection`, so existing call sites are untouched.
@@ -54,10 +53,3 @@ Time from launch, on this machine:
 
     vanilla, to main menu        arm64  5.7s, 6.7s     x86_64  11.3s, 10.2s
     modded, all plugins loaded   arm64  6.2s, 6.1s     x86_64  14.3s
-
-## Diagnosing a failed preload
-
-BepInEx writes preload exceptions to `preloader_<timestamp>.log` beside the executable,
-which on macOS is inside the bundle at `valheim.app/Contents/MacOS/`. Nothing reaches
-`BepInEx/LogOutput.log` when preloading fails, because the logger is not up yet. Files
-written there also break the bundle's code signature seal.

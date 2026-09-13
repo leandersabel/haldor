@@ -4,7 +4,7 @@
 set -e
 
 here=$(cd "$(dirname "$0")" && pwd)
-app=${1:-$here/Haldor.app}
+app=$here/Haldor.app
 python=$(command -v python3)
 "$python" -c 'import sys, tkinter; assert sys.version_info >= (3, 10), sys.version'
 
@@ -44,8 +44,8 @@ PLIST
 cat > "$app/Contents/MacOS/Haldor" <<LAUNCH
 #!/bin/sh
 # A double click lands here. Finder shows nothing when this fails, so say it aloud.
-if ! [ -x "$python" ]; then
-	osascript -e 'display alert "Haldor" message "$python is gone. Run make-app.sh again."'
+if ! [ -x "$python" ] || ! [ -f "$here/gui.py" ]; then
+	osascript -e 'display alert "Haldor" message "Haldor cannot find its Python or its checkout. Run make-app.sh again."'
 	exit 1
 fi
 exec "$python" "$here/gui.py"

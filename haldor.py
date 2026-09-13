@@ -49,29 +49,34 @@ def latest(pkg: str) -> dict:
     return json.loads(get(f"{API}/{pkg}/"))["latest"]
 
 
+def split(dep: str) -> tuple[str, str]:
+    """A pinned full_name into its namespace/name and its version."""
+    *parts, version = dep.split("-")
+    return "/".join(parts), version
+
+
 def resolve(pack: str, extras: list[str]) -> list[str]:
-    """Expand a pack and the extras beside it into a flat list of pinned dependencies."""
+    """Expand a pack and its extras into a flat list of pinned dependencies."""
     queue = latest(pack)["dependencies"] + [latest(e)["full_name"] for e in extras]
     seen, order = set(), []
     while queue:
         dep = queue.pop(0)
-        *parts, version = dep.split("-")
-        pkg = "-".join(parts)
+        pkg, version = split(dep)
         # The pack pins its own versions and is queued first, so an extra or a
         # transitive edge only fills a gap.
         if pkg in seen:
             continue
         seen.add(pkg)
         order.append(dep)
-        meta = json.loads(fetch(f"{API}/{'/'.join(parts)}/{version}/"))
+        meta = json.loads(fetch(f"{API}/{pkg}/{version}/"))
         queue += meta.get("dependencies", [])
     return order
 
 
 def install_mod(dep: str, bep: Path) -> None:
     """Unpack one Thunderstore package, honouring its layout."""
-    *parts, version = dep.split("-")
-    data = fetch(f"https://thunderstore.io/package/download/{'/'.join(parts)}/{version}/")
+    pkg, version = split(dep)
+    data = fetch(f"https://thunderstore.io/package/download/{pkg}/{version}/")
     zf = zipfile.ZipFile(io.BytesIO(data))
     names = zf.namelist()
 
@@ -82,7 +87,7 @@ def install_mod(dep: str, bep: Path) -> None:
     elif any(n.startswith(("plugins/", "patchers/", "config/")) for n in names):
         dest, strip = bep, ""
     else:
-        dest, strip = bep / "plugins" / "-".join(parts), ""
+        dest, strip = bep / "plugins" / pkg.replace("/", "-"), ""
 
     for n in names:
         if n.endswith("/") or not n.startswith(strip):
@@ -96,9 +101,8 @@ def install_loader(game: Path) -> None:
     """Overlay the macOS build of BepInEx, then replace its core with the arm64 one.
 
     Stock BepInEx bundles MonoMod 22, which patches code by asking for RWX memory.
-    Apple Silicon refuses that, so the core here is rebuilt against MonoMod 25,
-    which uses the JIT write-protect toggle the game's allow-jit entitlement permits.
-    Doorstop and the launcher come from upstream unchanged.
+    Apple Silicon refuses that, so the core here is rebuilt against MonoMod 25.
+    See ARM64.md. Doorstop and the launcher come from upstream unchanged.
     """
     zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX)))
     zf.extractall(game)
@@ -154,12 +158,9 @@ def main() -> None:
             install(s["pack"], s.get("extras", []))
         case ["play"]:
             play()
-        case ["gui"]:
-            import gui
-            gui.main()
         case _:
             sys.exit("usage: haldor "
-                     "(install <namespace/pack> | add <namespace/name> | update | play | gui)")
+                     "(install <namespace/pack> | add <namespace/name> | update | play)")
 
 
 if __name__ == "__main__":
