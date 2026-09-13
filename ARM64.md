@@ -47,6 +47,30 @@ mscorlib, and Unity's mscorlib has no `ValueTuple` to forward to. The `netstanda
 build defines the types too, but references `System.Collections`, which Mono does not
 have. `build.sh` puts the `net461` build in place after the copy.
 
+## Repatching while the game runs
+
+MonoMod repatches a method only once no thread is inside it, and it finds those threads
+by walking the stack for its own dynamic methods. Under Unity's Mono those frames are
+`DynamicMethod`s the walk does not resolve, so the count comes back zero and a mod that
+repatches from inside a patched method waits for itself. Every thread parks, the log
+ends mid-sentence, and the game shows a black screen with no error.
+
+Valheim Plus does exactly that: it calls `Harmony.UnpatchSelf` from the handler for the
+server's config, which is itself running through a detour.
+
+    DetourSyncInfo.WaitForNoActiveCalls        <- waiting for itself
+    ILHook.Apply / PatchProcessor.Unpatch
+    Harmony.UnpatchSelf
+    ServerSync.ConfigSync.HandleConfigSyncRPC
+    ZRpc.HandlePackage  ->  ZNet.Update
+
+`run_bepinex.sh` exports `MONOMOD_DMDType="cecil"`, which emits dynamic methods as real
+methods in generated assemblies. The stack walk sees those, the count is right, and the
+repatch goes through. It costs nothing measurable at startup.
+
+Apple Silicon is not what causes this. The same core deadlocks the same way under
+Rosetta, and stock BepInEx on MonoMod 22 waits for nobody, which is why it never shows.
+
 ## What it buys
 
 Time from launch, on this machine:

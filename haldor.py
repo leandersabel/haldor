@@ -115,7 +115,13 @@ def install_loader(game: Path) -> None:
     script = game / "run_bepinex.sh"
     text = script.read_text()
     text = re.sub(r'^executable_name=.*', 'executable_name="valheim.app"', text, flags=re.M)
-    text = re.sub(r'^(\s*export ARCHPREFERENCE=).*', r'\1"arm64"', text, flags=re.M)
+    # MonoMod waits out a method's callers before repatching it, and finds them by
+    # walking the stack. Its own dynamic methods do not appear there under Unity's
+    # Mono, so a mod that repatches from inside a patched method waits on itself and
+    # the game stops. The Cecil backend emits real methods, which the walk can see.
+    text = re.sub(r'^(\s*)export ARCHPREFERENCE=.*',
+                  r'\1export ARCHPREFERENCE="arm64"\n\1export MONOMOD_DMDType="cecil"',
+                  text, flags=re.M)
     script.write_text(text)
     script.chmod(0o755)
 
