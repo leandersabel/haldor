@@ -6,7 +6,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import urllib.request
 import zipfile
@@ -119,7 +118,6 @@ def install_loader(game: Path) -> None:
     text = re.sub(r'^(\s*export ARCHPREFERENCE=).*', r'\1"arm64"', text, flags=re.M)
     script.write_text(text)
     script.chmod(0o755)
-    subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(game)], capture_output=True)
 
 
 def install(pack: str, extras: list[str]) -> None:
