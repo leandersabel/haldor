@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Install a Thunderstore modpack into the macOS build of Valheim and launch it."""
+
+import io
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.request
+import zipfile
+from pathlib import Path
+
+API = "https://thunderstore.io/api/experimental/package"
+BEPINEX = ("https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5"
+           "/BepInEx_macos_universal_5.4.23.5.zip")
+STEAM = Path.home() / "Library/Application Support/Steam"
+CACHE = Path.home() / "Library/Caches/haldor"
+
+
+def game_dir() -> Path:
+    """Locate the Valheim install through Steam's library index."""
+    vdf = (STEAM / "steamapps/libraryfolders.vdf").read_text()
+    for lib in re.findall(r'"path"\s+"([^"]+)"', vdf):
+        d = Path(lib) / "steamapps/common/Valheim"
+        if (d / "valheim.app").is_dir():
+            return d
+    sys.exit("Valheim not found in any Steam library")
+
+
+def fetch(url: str) -> bytes:
+    cached = CACHE / re.sub(r"[^\w.-]", "_", url)
+    if not cached.exists():
+        CACHE.mkdir(parents=True, exist_ok=True)
+        req = urllib.request.Request(url, headers={"User-Agent": "haldor"})
+        with urllib.request.urlopen(req) as r:
+            cached.write_bytes(r.read())
+    return cached.read_bytes()
+
+
+def resolve(pack: str) -> list[str]:
+    """Expand a namespace/name reference into a flat list of pinned dependencies."""
+    ns, name = pack.split("/")
+    latest = json.loads(fetch(f"{API}/{ns}/{name}/"))["latest"]
+    seen, queue, order = set(), list(latest["dependencies"]), []
+    while queue:
+        dep = queue.pop(0)
+        *parts, version = dep.split("-")
+        pkg = "-".join(parts)
+        # The pack pins its own versions; a transitive edge only fills a gap.
+        if pkg in seen:
+            continue
+        seen.add(pkg)
+        order.append(dep)
+        meta = json.loads(fetch(f"{API}/{'/'.join(parts)}/{version}/"))
+        queue += meta.get("dependencies", [])
+    return order
+
+
+def install_mod(dep: str, bep: Path) -> None:
+    """Unpack one Thunderstore package, honouring its layout."""
+    *parts, version = dep.split("-")
+    data = fetch(f"https://thunderstore.io/package/download/{'/'.join(parts)}/{version}/")
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    names = zf.namelist()
+
+    # A package that carries its own BepInEx tree overlays the game root.
+    root = next((n[: n.index("BepInEx/")] for n in names if "BepInEx/" in n), None)
+    if root is not None:
+        dest, strip = bep.parent, root
+    elif any(n.startswith(("plugins/", "patchers/", "config/")) for n in names):
+        dest, strip = bep, ""
+    else:
+        dest, strip = bep / "plugins" / "-".join(parts), ""
+
+    for n in names:
+        if n.endswith("/") or not n.startswith(strip):
+            continue
+        target = dest / n[len(strip):]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(zf.read(n))
+
+
+def install_loader(game: Path) -> None:
+    """Overlay the macOS build of BepInEx and pin the launcher to x86_64.
+
+    MonoMod has no detour backend for arm64 macOS, so Harmony patching only
+    works on the Intel slice under Rosetta.
+    """
+    zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX)))
+    zf.extractall(game)
+    script = game / "run_bepinex.sh"
+    text = script.read_text()
+    text = re.sub(r'^executable_name=.*', 'executable_name="valheim.app"', text, flags=re.M)
+    text = re.sub(r'^(\s*export ARCHPREFERENCE=).*', r'\1"x86_64"', text, flags=re.M)
+    script.write_text(text)
+    script.chmod(0o755)
+    subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(game)], capture_output=True)
+
+
+def install(pack: str) -> None:
+    game = game_dir()
+    bep = game / "BepInEx"
+    for d in ("plugins", "patchers", "core"):
+        shutil.rmtree(bep / d, ignore_errors=True)
+    deps = resolve(pack)
+    for dep in deps:
+        print(f"  {dep}")
+        install_mod(dep, bep)
+    install_loader(game)
+    (bep / "haldor.json").write_text(json.dumps({"pack": pack, "mods": deps}, indent=2))
+    print(f"{len(deps)} packages installed into {game}")
+
+
+def play() -> None:
+    game = game_dir()
+    os.chdir(game)
+    os.execv("/bin/sh", ["sh", str(game / "run_bepinex.sh")])
+
+
+def main() -> None:
+    match sys.argv[1:]:
+        case ["install", pack]:
+            install(pack)
+        case ["update"]:
+            install(json.loads((game_dir() / "BepInEx/haldor.json").read_text())["pack"])
+        case ["play"]:
+            play()
+        case _:
+            sys.exit("usage: haldor (install <namespace/pack> | update | play)")
+
+
+if __name__ == "__main__":
+    main()
