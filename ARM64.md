@@ -48,7 +48,7 @@ which Mono does not have.
 Time from launch, on this machine:
 
     vanilla, to main menu        arm64  5.7s, 6.7s     x86_64  11.3s, 10.2s
-    modded, all plugins loaded   arm64  6.2s           x86_64  14.3s
+    modded, all plugins loaded   arm64  6.2s, 6.1s     x86_64  14.3s
 
 ## Diagnosing a failed preload
 
