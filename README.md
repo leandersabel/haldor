@@ -28,10 +28,15 @@ its own `python3` is 8.5, which hangs on the first redraw.
 
 ## The app
 
-`Haldor.app` is that window carrying its own Python and Tk, so it needs nothing
-installed. Every push builds it, and a tag starting with `v` publishes it to a release.
-`./make-app.sh` builds the same app here, from `gui.py`, `icon.svg` and a throwaway
-virtualenv holding PyInstaller.
+[**Download Haldor.app**](https://github.com/leandersabel/haldor/releases/latest/download/Haldor.zip),
+the window carrying its own Python and Tk, so it needs nothing installed. That link
+always points at the newest [release](https://github.com/leandersabel/haldor/releases).
+
+Every push builds the app and a tag starting with `v` publishes it, so an untagged build
+lives only as an artifact on its [workflow run](https://github.com/leandersabel/haldor/actions),
+which GitHub hands out to signed-in visitors and keeps for ninety days. `./make-app.sh`
+builds the same app here, from `gui.py`, `icon.svg` and a throwaway virtualenv holding
+PyInstaller.
 
 macOS quarantines what it downloads, and the signature is ad hoc, so clear the flag
 before the first launch:
