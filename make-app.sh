@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build Haldor.app, the window as a double-clickable app. PyInstaller puts a Python
 # and Tk inside the bundle, so the app needs nothing installed. CI runs this script.
-# Building it here needs a python3 with tkinter and a network for the first run.
+# Building it here needs a python3 with tkinter and a network.
 set -e
 
 here=$(cd "$(dirname "$0")" && pwd)

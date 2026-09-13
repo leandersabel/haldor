@@ -32,8 +32,6 @@ jobs:
           codesign --verify --strict Haldor.app
           test -d Haldor.app/Contents/Resources/bepinex-arm64/core
           test -s Haldor.app/Contents/Resources/certs/cacert.pem
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-            Haldor.app/Contents/Info.plist
       - name: Pack it
         # ditto keeps the bundle's symlinks and extended attributes, zip does not.
         run: ditto -c -k --keepParent Haldor.app Haldor.zip

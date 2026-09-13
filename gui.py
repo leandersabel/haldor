@@ -49,10 +49,8 @@ class App(ttk.Frame):
 
         ttk.Label(self, text="Source").grid(row=0, column=0, sticky="w")
         # Thunderstore is the only index Haldor reads. The host comes off the
-        # API so the list cannot drift from it.
-        source = ttk.Combobox(self, values=[SOURCE], state="readonly", width=16)
-        source.current(0)
-        source.grid(row=1, column=0, sticky="w", pady=(4, PAD))
+        # API so it cannot drift from it.
+        ttk.Label(self, text=SOURCE).grid(row=1, column=0, sticky="w", pady=(4, PAD))
 
         ttk.Label(self, text="Modpack").grid(row=2, column=0, sticky="w")
         entry = ttk.Entry(self, textvariable=self.pack)
@@ -100,8 +98,6 @@ class App(ttk.Frame):
         self.extras.insert("1.0", "\n".join(installed.get("extras", [])))
         self.say("\n".join(installed["mods"]) + "\n")
         self.status.set("Ready")
-
-    # What the buttons do
 
     def do_install(self) -> None:
         pack = self.pack.get().strip()
