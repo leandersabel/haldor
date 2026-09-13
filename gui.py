@@ -59,7 +59,7 @@ class App(tk.Frame):
         self.running = None
         self.failure = None
         self.working = False
-        self.aimed = None
+        self.active = False
         self.buttons: list = []
         self.modpack = tk.StringVar()
         self.where = tk.StringVar()
@@ -73,8 +73,8 @@ class App(tk.Frame):
         with contextlib.suppress(tk.TclError):
             master.tk.call("::tk::unsupported::MacWindowStyle", "appearance",
                            master, "darkaqua")
-        master.bind("<Activate>", lambda e: self.activated(True))
-        master.bind("<Deactivate>", lambda e: self.activated(False))
+        master.bind("<Activate>", lambda e: self.light(True))
+        master.bind("<Deactivate>", lambda e: self.light(False))
         self.pack(fill="both", expand=True)
 
         head = tk.Frame(self)
@@ -141,25 +141,20 @@ class App(tk.Frame):
                           font=self.font(weight="bold"))
         button.pack(side="left", padx=(0, 14))
         button.bind("<Button-1>", lambda e: None if self.working else command())
-        button.bind("<Enter>", lambda e: self.hover(button, BRIGHT, command))
-        button.bind("<Leave>", lambda e: self.hover(button, color, None))
+        button.bind("<Enter>", lambda e: self.light(self.active))
+        button.bind("<Leave>", lambda e: self.light(self.active))
         self.buttons.append((button, color))
 
-    def hover(self, button: tk.Label, color: str, command) -> None:
-        """Light the word, and take aim at what a click on it would run."""
-        button.configure(fg=DIM if self.working else color)
-        self.aimed = command
-
-    def activated(self, active: bool) -> None:
-        """Run what the click that made the window active was aimed at.
-
-        macOS spends that click on the window and Tk never sees it, so a button
-        under the pointer would swallow it. Leaving the app forgets the aim, so
-        returning by the keyboard or the Dock runs nothing.
+    def light(self, active: bool) -> None:
+        """Light the word under the pointer, and only while the window is the
+        active one. macOS keeps the click that activates a window, so a
+        background window that answers the pointer promises a click it eats.
         """
-        command, self.aimed = self.aimed, None
-        if command and active and not self.working:
-            command()
+        self.active = active
+        under = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
+        for button, color in self.buttons:
+            button.configure(fg=DIM if self.working else
+                             BRIGHT if active and button is under else color)
 
     def log(self) -> tk.Text:
         out = tk.Text(self, font=self.font(12), bg=BG, fg=FG, relief="flat",
@@ -276,8 +271,7 @@ class App(tk.Frame):
 
     def busy(self, working: bool, status: str) -> None:
         self.working = working
-        for button, color in self.buttons:
-            button.configure(fg=DIM if working else color)
+        self.light(self.active)
         self.dot.configure(fg=AMBER if self.failure else CYAN if working else BLUE)
         self.status.set(status)
 
