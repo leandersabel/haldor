@@ -16,6 +16,8 @@ API = "https://thunderstore.io/api/experimental/package"
 BEPINEX = ("https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5"
            "/BepInEx_macos_universal_5.4.23.5.zip")
 STEAM = Path.home() / "Library/Application Support/Steam"
+# Beside this file, or inside the app bundle once PyInstaller has unpacked it.
+HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
 CACHE = Path.home() / "Library/Caches/haldor"
 
 
@@ -109,7 +111,7 @@ def install_loader(game: Path) -> None:
 
     core = game / "BepInEx" / "core"
     shutil.rmtree(core, ignore_errors=True)
-    shutil.copytree(Path(__file__).parent / "bepinex-arm64" / "core", core)
+    shutil.copytree(HERE / "bepinex-arm64" / "core", core)
 
     script = game / "run_bepinex.sh"
     text = script.read_text()
@@ -146,21 +148,22 @@ def play() -> None:
 
 
 def main() -> None:
-    match sys.argv[1:]:
-        case ["install", pack]:
-            install(pack, [])
-        case ["add", pkg]:
-            s = state()
-            extras = s.get("extras", [])
-            install(s["pack"], extras if pkg in extras else extras + [pkg])
-        case ["update"]:
-            s = state()
-            install(s["pack"], s.get("extras", []))
-        case ["play"]:
-            play()
-        case _:
-            sys.exit("usage: haldor "
-                     "(install <namespace/pack> | add <namespace/name> | update | play)")
+    # Plain ifs, not match, so any python3 can run the command line.
+    args = sys.argv[1:]
+    if args[:1] == ["install"] and len(args) == 2:
+        install(args[1], [])
+    elif args[:1] == ["add"] and len(args) == 2:
+        s = state()
+        extras = s.get("extras", [])
+        install(s["pack"], extras if args[1] in extras else extras + [args[1]])
+    elif args == ["update"]:
+        s = state()
+        install(s["pack"], s.get("extras", []))
+    elif args == ["play"]:
+        play()
+    else:
+        sys.exit("usage: haldor "
+                 "(install <namespace/pack> | add <namespace/name> | update | play)")
 
 
 if __name__ == "__main__":

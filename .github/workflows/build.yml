@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build the app
+        # A tag names the version, with the v that tags carry taken off.
+        run: VERSION="${VERSION#v}" ./make-app.sh
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.0' }}
+      - name: Check the bundle
+        run: |
+          codesign --verify --strict Haldor.app
+          test -d Haldor.app/Contents/Resources/bepinex-arm64/core
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            Haldor.app/Contents/Info.plist
+      - name: Pack it
+        # ditto keeps the bundle's symlinks and extended attributes, zip does not.
+        run: ditto -c -k --keepParent Haldor.app Haldor.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Haldor
+          path: Haldor.zip
+
+  release:
+    needs: app
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Haldor
+      - run: gh release create "$GITHUB_REF_NAME" Haldor.zip --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
