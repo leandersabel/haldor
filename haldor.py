@@ -29,20 +29,24 @@ def game_dir() -> Path:
     sys.exit("Valheim not found in any Steam library")
 
 
+def get(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "haldor"})
+    with urllib.request.urlopen(req) as r:
+        return r.read()
+
+
 def fetch(url: str) -> bytes:
+    """Cache a URL whose body cannot change: a pinned version or a download."""
     cached = CACHE / re.sub(r"[^\w.-]", "_", url)
     if not cached.exists():
         CACHE.mkdir(parents=True, exist_ok=True)
-        req = urllib.request.Request(url, headers={"User-Agent": "haldor"})
-        with urllib.request.urlopen(req) as r:
-            cached.write_bytes(r.read())
+        cached.write_bytes(get(url))
     return cached.read_bytes()
 
 
 def latest(pkg: str) -> dict:
     """The newest published version of a namespace/name reference."""
-    ns, name = pkg.split("/")
-    return json.loads(fetch(f"{API}/{ns}/{name}/"))["latest"]
+    return json.loads(get(f"{API}/{pkg}/"))["latest"]
 
 
 def resolve(pack: str, extras: list[str]) -> list[str]:

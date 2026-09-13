@@ -13,6 +13,7 @@ through Doorstop.
     ./haldor.py add DrummerCraig/ShaderHelperForMac
     ./haldor.py update
     ./haldor.py play
+    ./haldor.py gui
 
 `install` pins every version the pack names. Where a mod asks for an older version
 of something the pack already pins, the pack wins, so the install matches what the
@@ -22,6 +23,11 @@ other players run.
 the pack, where `update` keeps it. The pack is still queued first, so an extra never
 moves a version the pack pins. Deleting the entry and running `update` drops the mod.
 `install` starts from the pack alone.
+
+`gui` opens a window on the same state: the modpack, the extras beside it, Install
+and Play. Install applies whatever the window shows, so editing the extras there and
+installing covers both `add` and dropping a mod. Tkinter comes with Python, so the
+window needs nothing installed.
 
 ## Why it is built this way
 
