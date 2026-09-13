@@ -43,6 +43,13 @@ provides no such assembly. It is the net461 build, a pure forwarder to mscorlib,
 the type actually lives. The net452 build does not work: it pulls in `System.Collections`,
 which Mono does not have.
 
+## What it buys
+
+Time from launch, on this machine:
+
+    vanilla, to main menu        arm64  5.7s, 6.7s     x86_64  11.3s, 10.2s
+    modded, all plugins loaded   arm64  6.2s           x86_64  14.3s
+
 ## Diagnosing a failed preload
 
 BepInEx writes preload exceptions to `preloader_<timestamp>.log` beside the executable,
