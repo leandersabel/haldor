@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+  <!-- The plate is inset the way macOS insets an app icon, leaving the rest clear. -->
+  <defs>
+    <linearGradient id="plate" gradientUnits="userSpaceOnUse" x1="512" y1="100" x2="512" y2="924">
+      <stop offset="0" stop-color="#3d4a58"/>
+      <stop offset="1" stop-color="#1c242e"/>
+    </linearGradient>
+    <linearGradient id="carve" gradientUnits="userSpaceOnUse" x1="512" y1="300" x2="512" y2="724">
+      <stop offset="0" stop-color="#e8bd76"/>
+      <stop offset="1" stop-color="#b8823c"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#plate)"/>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none"
+        stroke="#5d7086" stroke-width="4"/>
+  <!-- Hagalaz, the h rune: two staves and a slanting branch. -->
+  <g stroke="url(#carve)" stroke-width="62" stroke-linecap="round" fill="none">
+    <path d="M366 300 L366 724"/>
+    <path d="M658 300 L658 724"/>
+    <path d="M366 438 L658 586"/>
+  </g>
+</svg>

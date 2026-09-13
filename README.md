@@ -14,6 +14,7 @@ through Doorstop.
     ./haldor.py update
     ./haldor.py play
     ./haldor.py gui
+    ./make-app.sh
 
 `install` pins every version the pack names. Where a mod asks for an older version
 of something the pack already pins, the pack wins, so the install matches what the
@@ -28,6 +29,12 @@ moves a version the pack pins. Deleting the entry and running `update` drops the
 and Play. Install applies whatever the window shows, so editing the extras there and
 installing covers both `add` and dropping a mod. Tkinter comes with Python, so the
 window needs nothing installed.
+
+`make-app.sh` builds `Haldor.app` beside it, which opens the same window from Finder
+or the Dock. The bundle is a launcher and an icon, naming this checkout and the
+`python3` on your path, so build it again if either moves. The icon is `icon.svg`,
+rasterized at build time. macOS asks once for access to the folder the checkout
+sits in.
 
 ## Why it is built this way
 
