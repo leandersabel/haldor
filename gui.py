@@ -63,7 +63,8 @@ class App(ttk.Frame):
         self.launch.grid(row=0, column=2)
 
         ttk.Separator(self).grid(row=5, column=0, sticky="ew", pady=PAD)
-        self.console = self.text(row=6, height=10, font="TkFixedFont", state="disabled")
+        self.console = self.text(row=6, height=10, wrap="word",
+                                 font="TkFixedFont", state="disabled")
         ttk.Label(self, textvariable=self.status).grid(row=7, column=0, sticky="w", pady=(PAD, 0))
 
         entry.focus_set()
@@ -71,8 +72,8 @@ class App(ttk.Frame):
         self.pump()
 
     def text(self, row: int, **kw) -> tk.Text:
-        """A text box that sits flat in the layout and scrolls when it has to."""
-        box = tk.Text(self, wrap="none", relief="flat", padx=8, pady=6,
+        """A text box that sits flat in the layout."""
+        box = tk.Text(self, relief="flat", padx=8, pady=6,
                       highlightthickness=1, **kw)
         box.grid(row=row, column=0, sticky="nsew")
         return box

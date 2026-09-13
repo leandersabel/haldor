@@ -154,9 +154,12 @@ def main() -> None:
             install(s["pack"], s.get("extras", []))
         case ["play"]:
             play()
+        case ["gui"]:
+            import gui
+            gui.main()
         case _:
             sys.exit("usage: haldor "
-                     "(install <namespace/pack> | add <namespace/name> | update | play)")
+                     "(install <namespace/pack> | add <namespace/name> | update | play | gui)")
 
 
 if __name__ == "__main__":
