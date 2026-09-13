@@ -23,9 +23,12 @@ BepInEx 5.4.23.5 rebuilt against MonoMod 25 and HarmonyX 2.16. MonoMod 25 toggle
 `pthread_jit_write_protect_np` instead of asking for RWX, which the game's existing
 `allow-jit` entitlement permits. Nothing is re-signed and no entitlement is added.
 
-The result is in `bepinex-arm64/core`, and `bepinex-arm64/*.patch` reproduces it
-against upstream `v5.4.23.5`. Doorstop, the launcher script and every mod are
-upstream and unmodified.
+The result is in `bepinex-arm64/core`. `bepinex-arm64/build.sh` reproduces it from
+`bepinex-arm64/*.patch` against upstream `v5.4.23.5`, needing only a .NET SDK.
+Doorstop, the launcher script and every mod are upstream and unmodified.
+
+Most of the core comes verbatim from the pinned packages. The assemblies built from
+source differ from the shipped copies only in PE timestamp, MVID and debug directory.
 
 The patch is 11 files, +103/-347:
 
@@ -39,9 +42,11 @@ The patch is 11 files, +103/-347:
 - Target framework moves from net35 to net472, which is what Unity's Mono is.
 
 `System.ValueTuple.dll` ships alongside because MonoMod 25 references it and the game
-provides no such assembly. It is the net461 build, a pure forwarder to mscorlib, where
-the type actually lives. The net452 build does not work: it pulls in `System.Collections`,
-which Mono does not have.
+provides no such assembly. It is the `net461` build, which defines the types. A restore
+at net472 resolves the `net47` build instead, which holds nothing but forwarders to
+mscorlib, and Unity's mscorlib has no `ValueTuple` to forward to. The `netstandard1.0`
+build defines the types too, but references `System.Collections`, which Mono does not
+have. `build.sh` puts the `net461` build in place after the copy.
 
 ## What it buys
 
