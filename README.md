@@ -79,6 +79,10 @@ which on macOS is inside the bundle at `valheim.app/Contents/MacOS/`. Nothing ap
 `BepInEx/LogOutput.log` when preloading fails, because the logger is not up yet. Files
 written there also break the bundle's code signature seal.
 
+## How this was made
+
+Written with Claude Code.
+
 ## License
 
 MIT, in `LICENSE`. BepInEx, Doorstop and the mods keep their own.
