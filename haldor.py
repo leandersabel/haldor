@@ -83,17 +83,24 @@ def install_mod(dep: str, bep: Path) -> None:
 
 
 def install_loader(game: Path) -> None:
-    """Overlay the macOS build of BepInEx and pin the launcher to x86_64.
+    """Overlay the macOS build of BepInEx, then replace its core with the arm64 one.
 
-    MonoMod has no detour backend for arm64 macOS, so Harmony patching only
-    works on the Intel slice under Rosetta.
+    Stock BepInEx bundles MonoMod 22, which patches code by asking for RWX memory.
+    Apple Silicon refuses that, so the core here is rebuilt against MonoMod 25,
+    which uses the JIT write-protect toggle the game's allow-jit entitlement permits.
+    Doorstop and the launcher come from upstream unchanged.
     """
     zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX)))
     zf.extractall(game)
+
+    core = game / "BepInEx" / "core"
+    shutil.rmtree(core, ignore_errors=True)
+    shutil.copytree(Path(__file__).parent / "bepinex-arm64" / "core", core)
+
     script = game / "run_bepinex.sh"
     text = script.read_text()
     text = re.sub(r'^executable_name=.*', 'executable_name="valheim.app"', text, flags=re.M)
-    text = re.sub(r'^(\s*export ARCHPREFERENCE=).*', r'\1"x86_64"', text, flags=re.M)
+    text = re.sub(r'^(\s*export ARCHPREFERENCE=).*', r'\1"arm64"', text, flags=re.M)
     script.write_text(text)
     script.chmod(0o755)
     subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(game)], capture_output=True)

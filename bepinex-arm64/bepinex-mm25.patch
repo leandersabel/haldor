@@ -1,0 +1,600 @@
+diff --git a/BepInEx.Bootstrap/BepInEx.Bootstrap.csproj b/BepInEx.Bootstrap/BepInEx.Bootstrap.csproj
+index 23a7a38..6b3732e 100644
+--- a/BepInEx.Bootstrap/BepInEx.Bootstrap.csproj
++++ b/BepInEx.Bootstrap/BepInEx.Bootstrap.csproj
+@@ -1,7 +1,7 @@
+ ﻿<Project Sdk="Microsoft.NET.Sdk">
+     <PropertyGroup>
+         <Product>BepInEx.Bootstrap</Product>
+-        <TargetFramework>net35</TargetFramework>
++        <TargetFramework>net472</TargetFramework>
+         <Version>1.0.0.0</Version>
+     </PropertyGroup>
+ 
+diff --git a/BepInEx.Patcher/BepInEx.Patcher.csproj b/BepInEx.Patcher/BepInEx.Patcher.csproj
+index aa28c4a..f3e6f60 100644
+--- a/BepInEx.Patcher/BepInEx.Patcher.csproj
++++ b/BepInEx.Patcher/BepInEx.Patcher.csproj
+@@ -2,7 +2,7 @@
+     <PropertyGroup>
+         <Product>BepInEx.Patcher</Product>
+         <Copyright>Copyright © Bepis 2018</Copyright>
+-        <TargetFramework>net35</TargetFramework>
++        <TargetFramework>net472</TargetFramework>
+         <OutputType>Exe</OutputType>
+         <Version>5.0.0.0</Version>
+     </PropertyGroup>
+diff --git a/BepInEx.Preloader/BepInEx.Preloader.csproj b/BepInEx.Preloader/BepInEx.Preloader.csproj
+index f054cf3..555fccd 100644
+--- a/BepInEx.Preloader/BepInEx.Preloader.csproj
++++ b/BepInEx.Preloader/BepInEx.Preloader.csproj
+@@ -2,7 +2,7 @@
+     <PropertyGroup>
+         <Product>BepInEx.Preloader</Product>
+         <Copyright>Copyright © Bepis 2019</Copyright>
+-        <TargetFramework>net35</TargetFramework>
++        <TargetFramework>net472</TargetFramework>
+         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+         <CopyDocumentationFilesFromPackages>true</CopyDocumentationFilesFromPackages>
+         <VersionPrefix>$(BepInExVersionPrefix)</VersionPrefix>
+@@ -15,10 +15,10 @@
+     </ItemGroup>
+ 
+     <ItemGroup>
+-        <PackageReference Include="HarmonyX" Version="2.9.0"/>
+-        <PackageReference Include="Mono.Cecil" Version="0.10.4"/>
+-        <PackageReference Include="MonoMod.RuntimeDetour" Version="22.1.29.1"/>
+-        <PackageReference Include="MonoMod.Utils" Version="22.1.29.1"/>
++        <PackageReference Include="HarmonyX" Version="2.16.1"/>
++        <PackageReference Include="Mono.Cecil" Version="0.11.6"/>
++        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.6"/>
++        <PackageReference Include="MonoMod.Utils" Version="25.0.14"/>
+     </ItemGroup>
+ 
+     <Target Name="DeletePdbFromPublish" AfterTargets="Publish">
+diff --git a/BepInEx.Preloader/Entrypoint.cs b/BepInEx.Preloader/Entrypoint.cs
+index b9438cb..8d63538 100644
+--- a/BepInEx.Preloader/Entrypoint.cs
++++ b/BepInEx.Preloader/Entrypoint.cs
+@@ -23,6 +23,11 @@ namespace BepInEx.Preloader
+ 			"Mono.Cecil.Pdb.dll",
+ 			"Mono.Cecil.Rocks.dll",
+ 			"MonoMod.Utils.dll",
++			"MonoMod.Backports.dll",
++			"MonoMod.ILHelpers.dll",
++			"MonoMod.Core.dll",
++			"MonoMod.Iced.dll",
++
+ 			"MonoMod.RuntimeDetour.dll",
+ 			"0Harmony.dll",
+ 		};
+@@ -45,7 +50,7 @@ namespace BepInEx.Preloader
+ 
+ 		public static void PreloaderPreMain()
+ 		{
+-			PlatformUtils.SetPlatform();
++			// MonoMod detects the platform itself.
+ 
+ 			string bepinPath = Utility.ParentDirectory(Path.GetFullPath(EnvVars.DOORSTOP_INVOKE_DLL_PATH), 2);
+ 
+@@ -62,7 +67,7 @@ namespace BepInEx.Preloader
+ 		{
+ 			if (Preloader.ConfigApplyRuntimePatches.Value)
+ 			{
+-				XTermFix.Apply();
++
+ 				ConsoleSetOutFix.Apply();
+ 			}
+ 
+diff --git a/BepInEx.Preloader/Platform.cs b/BepInEx.Preloader/Platform.cs
+deleted file mode 100644
+index 3c73362..0000000
+--- a/BepInEx.Preloader/Platform.cs
++++ /dev/null
+@@ -1,151 +0,0 @@
+-﻿using System;
+-using System.IO;
+-using System.Reflection;
+-using System.Runtime.InteropServices;
+-using MonoMod.Utils;
+-
+-namespace BepInEx.Preloader
+-{
+-	internal static class PlatformUtils
+-	{
+-		[StructLayout(LayoutKind.Sequential, Pack = 1)]
+-		public struct utsname_osx
+-		{
+-			private const int osx_utslen = 256;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = osx_utslen)]
+-			public string sysname;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = osx_utslen)]
+-			public string nodename;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = osx_utslen)]
+-			public string release;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = osx_utslen)]
+-			public string version;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = osx_utslen)]
+-			public string machine;
+-		}
+-
+-		[StructLayout(LayoutKind.Sequential, Pack = 1)]
+-		public struct utsname_linux
+-		{
+-			private const int linux_utslen = 65;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string sysname;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string nodename;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string release;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string version;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string machine;
+-
+-			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = linux_utslen)]
+-			public string domainname;
+-		}
+-
+-		[DllImport("libc.so.6", EntryPoint = "uname", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+-		private static extern IntPtr uname_linux(ref utsname_linux utsname);
+-
+-		[DllImport("/usr/lib/libSystem.dylib", EntryPoint = "uname", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+-		private static extern IntPtr uname_osx(ref utsname_osx utsname);
+-
+-		/// <summary>
+-		/// Recreation of MonoMod's PlatformHelper.DeterminePlatform method, but with libc calls instead of creating processes.
+-		/// </summary>
+-		public static void SetPlatform()
+-		{
+-			var current = Platform.Unknown;
+-
+-			// For old Mono, get from a private property to accurately get the platform.
+-			// static extern PlatformID Platform
+-			PropertyInfo p_Platform = typeof(Environment).GetProperty("Platform", BindingFlags.NonPublic | BindingFlags.Static);
+-			string platID;
+-			if (p_Platform != null)
+-			{
+-				platID = p_Platform.GetValue(null, new object[0]).ToString();
+-			}
+-			else
+-			{
+-				// For .NET and newer Mono, use the usual value.
+-				platID = Environment.OSVersion.Platform.ToString();
+-			}
+-			platID = platID.ToLowerInvariant();
+-
+-			if (platID.Contains("win"))
+-			{
+-				current = Platform.Windows;
+-			}
+-			else if (platID.Contains("mac") || platID.Contains("osx"))
+-			{
+-				current = Platform.MacOS;
+-			}
+-			else if (platID.Contains("lin") || platID.Contains("unix"))
+-			{
+-				current = Platform.Linux;
+-			}
+-
+-			if (Is(current, Platform.Linux) && Directory.Exists("/data") && File.Exists("/system/build.prop"))
+-			{
+-				current = Platform.Android;
+-			}
+-			else if (Is(current, Platform.Unix) && Directory.Exists("/System/Library/AccessibilityBundles"))
+-			{
+-				current = Platform.iOS;
+-			}
+-
+-			// Is64BitOperatingSystem has been added in .NET Framework 4.0
+-			MethodInfo m_get_Is64BitOperatingSystem = typeof(Environment).GetProperty("Is64BitOperatingSystem")?.GetGetMethod();
+-			if (m_get_Is64BitOperatingSystem != null)
+-				current |= (((bool)m_get_Is64BitOperatingSystem.Invoke(null, new object[0])) ? Platform.Bits64 : 0);
+-			else
+-				current |= (IntPtr.Size >= 8 ? Platform.Bits64 : 0);
+-
+-			if ((Is(current, Platform.MacOS) || Is(current, Platform.Linux)) && Type.GetType("Mono.Runtime") != null)
+-			{
+-				string arch;
+-				IntPtr result;
+-
+-				if (Is(current, Platform.MacOS))
+-				{
+-					utsname_osx utsname_osx = new utsname_osx();
+-					result = uname_osx(ref utsname_osx);
+-					arch = utsname_osx.machine;
+-				}
+-				else
+-				{
+-					// Linux
+-					utsname_linux utsname_linux = new utsname_linux();
+-					result = uname_linux(ref utsname_linux);
+-					arch = utsname_linux.machine;
+-				}
+-
+-				if (result == IntPtr.Zero && (arch.StartsWith("aarch") || arch.StartsWith("arm")))
+-					current |= Platform.ARM;
+-			}
+-			else
+-			{
+-				// Detect ARM based on PE info or uname.
+-				typeof(object).Module.GetPEKind(out PortableExecutableKinds peKind, out ImageFileMachine machine);
+-				if (machine == (ImageFileMachine)0x01C4 /* ARM, .NET Framework 4.5 */)
+-					current |= Platform.ARM;
+-			}
+-
+-			PlatformHelper.Current = current;
+-		}
+-
+-		private static bool Is(Platform current, Platform expected)
+-		{
+-			return (current & expected) == expected;
+-		}
+-	}
+-}
+\ No newline at end of file
+diff --git a/BepInEx.Preloader/RuntimeFixes/XTermFix.cs b/BepInEx.Preloader/RuntimeFixes/XTermFix.cs
+deleted file mode 100644
+index 7db6ef5..0000000
+--- a/BepInEx.Preloader/RuntimeFixes/XTermFix.cs
++++ /dev/null
+@@ -1,136 +0,0 @@
+-﻿using System;
+-using System.Collections.Generic;
+-using System.Linq;
+-using System.Reflection.Emit;
+-using HarmonyLib;
+-using MonoMod.RuntimeDetour;
+-using MonoMod.RuntimeDetour.Platforms;
+-using MonoMod.Utils;
+-
+-namespace BepInEx.Preloader.RuntimeFixes
+-{
+-	internal static class XTermFix
+-	{
+-		public static void Apply()
+-		{
+-			if (PlatformHelper.Is(Platform.Windows))
+-				return;
+-
+-			if (typeof(Console).Assembly.GetType("System.ConsoleDriver") == null)
+-			{
+-				// Mono version is too old, use our own TTY implementation instead
+-				return;
+-			}
+-
+-			if (AccessTools.Method("System.TermInfoReader:DetermineVersion") != null)
+-			{
+-				// Fix has been applied officially
+-				return;
+-			}
+-			
+-			// Apparently on older Unity versions (4.x), using Process.Start can run Console..cctor
+-			// And since MonoMod's PlatformHelper (used by DetourHelper.Native) runs Process.Start to determine ARM/x86 platform,
+-			// this causes a crash owing to TermInfoReader running before it can be patched and fixed
+-			// Because Doorstop does not support ARM at the moment, we can get away with just forcing x86 detour platform.
+-			// TODO: Figure out a way to detect ARM on Unix without running Process.Start
+-			DetourHelper.Native = new DetourNativeX86Platform();
+-			
+-			var harmony = new HarmonyLib.Harmony("com.bepinex.xtermfix");
+-
+-			harmony.Patch(AccessTools.Method("System.TermInfoReader:ReadHeader"),
+-				prefix: new HarmonyMethod(typeof(XTermFix), nameof(ReadHeaderPrefix)));
+-
+-			harmony.Patch(AccessTools.Method("System.TermInfoReader:Get", new []{ AccessTools.TypeByName("System.TermInfoNumbers") }),
+-				transpiler: new HarmonyMethod(typeof(XTermFix), nameof(GetTermInfoNumbersTranspiler)));
+-
+-			harmony.Patch(AccessTools.Method("System.TermInfoReader:Get", new []{ AccessTools.TypeByName("System.TermInfoStrings") }),
+-				transpiler: new HarmonyMethod(typeof(XTermFix), nameof(GetTermInfoStringsTranspiler)));
+-
+-			harmony.Patch(AccessTools.Method("System.TermInfoReader:GetStringBytes", new []{ AccessTools.TypeByName("System.TermInfoStrings") }),
+-				transpiler: new HarmonyMethod(typeof(XTermFix), nameof(GetTermInfoStringsTranspiler)));
+-
+-			DetourHelper.Native = null;
+-		}
+-
+-		public static int intOffset;
+-
+-		public static int GetInt32(byte[] buffer, int offset)
+-		{
+-			int b1 = buffer[offset];
+-			int b2 = buffer[offset + 1];
+-			int b3 = buffer[offset + 2];
+-			int b4 = buffer[offset + 3];
+-
+-			return b1 | (b2 << 8) | (b3 << 16) | (b4 << 24);
+-		}
+-
+-		public static short GetInt16(byte[] buffer, int offset)
+-		{
+-			int b1 = buffer[offset];
+-			int b2 = buffer[offset + 1];
+-
+-			return (short)(b1 | (b2 << 8));
+-		}
+-
+-		public static int GetInteger(byte[] buffer, int offset)
+-		{
+-			return intOffset == 2
+-				? GetInt16(buffer, offset)
+-				: GetInt32(buffer, offset);
+-		}
+-
+-		public static void DetermineVersion(short magic)
+-		{
+-			if (magic == 0x11a)
+-				intOffset = 2;
+-			else if (magic == 0x21e)
+-				intOffset = 4;
+-			else
+-				throw new Exception($"Unknown xterm header format: {magic}");
+-		}
+-
+-		public static bool ReadHeaderPrefix(byte[] buffer, ref int position, ref short ___boolSize, ref short ___numSize, ref short ___strOffsets)
+-		{
+-			short magic = GetInt16(buffer, position);
+-			position += 2;
+-			DetermineVersion(magic);
+-
+-			// nameSize = GetInt16(buffer, position);
+-			position += 2;
+-			___boolSize = GetInt16(buffer, position);
+-			position += 2;
+-			___numSize = GetInt16(buffer, position);
+-			position += 2;
+-			___strOffsets = GetInt16(buffer, position);
+-			position += 2;
+-			// strSize = GetInt16(buffer, position);
+-			position += 2;
+-
+-			return false;
+-		}
+-
+-		public static IEnumerable<CodeInstruction> GetTermInfoNumbersTranspiler(IEnumerable<CodeInstruction> instructions)
+-		{
+-			// This implementation does not seem to have changed so I will be using indexes like the lazy fuck I am
+-
+-			var list = instructions.ToList();
+-
+-			list[31] = new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(XTermFix), nameof(intOffset)));
+-			list[36] = new CodeInstruction(OpCodes.Nop);
+-			list[39] = new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(XTermFix), nameof(GetInteger)));
+-
+-			return list;
+-		}
+-
+-		public static IEnumerable<CodeInstruction> GetTermInfoStringsTranspiler(IEnumerable<CodeInstruction> instructions)
+-		{
+-			// This implementation does not seem to have changed so I will be using indexes like the lazy fuck I am
+-
+-			var list = instructions.ToList();
+-
+-			list[32] = new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(XTermFix), nameof(intOffset)));
+-
+-			return list;
+-		}
+-	}
+-}
+\ No newline at end of file
+diff --git a/BepInEx/BepInEx.csproj b/BepInEx/BepInEx.csproj
+index 3451f39..77fc361 100644
+--- a/BepInEx/BepInEx.csproj
++++ b/BepInEx/BepInEx.csproj
+@@ -3,7 +3,7 @@
+     <Product>BepInEx</Product>
+     <Description>Unity plugin injection framework</Description>
+     <Copyright>Copyright © Bepis 2018</Copyright>
+-    <TargetFramework>net35</TargetFramework>
++    <TargetFramework>net472</TargetFramework>
+     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+     <CopyDocumentationFilesFromPackages>true</CopyDocumentationFilesFromPackages>
+     <VersionPrefix>$(BepInExVersionPrefix)</VersionPrefix>
+@@ -18,19 +18,13 @@
+       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+       <Targets>Build;DocumentationProjectOutputGroup</Targets>
+     </ProjectReference>
+-    <ProjectReference Include="..\submodules\BepInEx.Harmony\HarmonyX2Interop\HarmonyX2Interop.csproj">
+-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+-      <OutputItemType>Content</OutputItemType>
+-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+-      <Targets>Build</Targets>
+-    </ProjectReference>
+   </ItemGroup>
+ 
+   <ItemGroup>
+-    <PackageReference Include="HarmonyX" Version="2.9.0"/>
+-    <PackageReference Include="Mono.Cecil" Version="0.10.4"/>
+-    <PackageReference Include="MonoMod.RuntimeDetour" Version="22.1.29.1"/>
+-    <PackageReference Include="MonoMod.Utils" Version="22.1.29.1"/>
++    <PackageReference Include="HarmonyX" Version="2.16.1"/>
++    <PackageReference Include="Mono.Cecil" Version="0.11.6"/>
++    <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.6"/>
++    <PackageReference Include="MonoMod.Utils" Version="25.0.14"/>
+     <PackageReference Include="UnityEngine" Version="5.6.1" IncludeAssets="compile"/>
+   </ItemGroup>
+ 
+diff --git a/BepInEx/Console/Unix/UnixStreamHelper.cs b/BepInEx/Console/Unix/UnixStreamHelper.cs
+index c82e5bb..47884ac 100644
+--- a/BepInEx/Console/Unix/UnixStreamHelper.cs
++++ b/BepInEx/Console/Unix/UnixStreamHelper.cs
+@@ -1,54 +1,34 @@
+-﻿using System;
+-using System.Collections.Generic;
++using System;
+ using System.IO;
+-using MonoMod.Utils;
++using System.Runtime.InteropServices;
+ 
+ namespace BepInEx.Unix
+ {
+ 	internal static class UnixStreamHelper
+ 	{
+-		public delegate int dupDelegate(int fd);
+-		[DynDllImport("libc")]
+-		public static dupDelegate dup;
++		// libc resolves to glibc on Linux and to libSystem on macOS.
++		private const string Libc = "libc";
+ 
+-		public delegate IntPtr fdopenDelegate(int fd, string mode);
+-		[DynDllImport("libc")]
+-		public static fdopenDelegate fdopen;
++		[DllImport(Libc, EntryPoint = "dup")]
++		public static extern int dup(int fd);
+ 
+-		public delegate IntPtr freadDelegate(IntPtr ptr, IntPtr size, IntPtr nmemb, IntPtr stream);
+-		[DynDllImport("libc")]
+-		public static freadDelegate fread;
++		[DllImport(Libc, EntryPoint = "fdopen")]
++		public static extern IntPtr fdopen(int fd, string mode);
+ 
+-		public delegate int fwriteDelegate(IntPtr ptr, IntPtr size, IntPtr nmemb, IntPtr stream);
+-		[DynDllImport("libc")]
+-		public static fwriteDelegate fwrite;
++		[DllImport(Libc, EntryPoint = "fread")]
++		public static extern IntPtr fread(IntPtr ptr, IntPtr size, IntPtr nmemb, IntPtr stream);
+ 
+-		public delegate int fcloseDelegate(IntPtr stream);
+-		[DynDllImport("libc")]
+-		public static fcloseDelegate fclose;
++		[DllImport(Libc, EntryPoint = "fwrite")]
++		public static extern int fwrite(IntPtr ptr, IntPtr size, IntPtr nmemb, IntPtr stream);
+ 
+-		public delegate int fflushDelegate(IntPtr stream);
+-		[DynDllImport("libc")]
+-		public static fflushDelegate fflush;
++		[DllImport(Libc, EntryPoint = "fclose")]
++		public static extern int fclose(IntPtr stream);
+ 
+-		public delegate int isattyDelegate(int fd);
+-		[DynDllImport("libc")]
+-		public static isattyDelegate isatty;
++		[DllImport(Libc, EntryPoint = "fflush")]
++		public static extern int fflush(IntPtr stream);
+ 
+-		static UnixStreamHelper()
+-		{
+-			var libcMapping = new Dictionary<string, List<DynDllMapping>>
+-			{
+-				["libc"] = new List<DynDllMapping>
+-				{
+-					"libc.so.6", // Ubuntu glibc
+-					"libc", // Linux glibc
+-					"/usr/lib/libSystem.dylib", // OSX POSIX
+-				}
+-			};
+-
+-			typeof(UnixStreamHelper).ResolveDynDllImports(libcMapping);
+-		}
++		[DllImport(Libc, EntryPoint = "isatty")]
++		public static extern int isatty(int fd);
+ 
+ 		public static Stream CreateDuplicateStream(int fileDescriptor)
+ 		{
+@@ -57,4 +37,4 @@ namespace BepInEx.Unix
+ 			return new UnixStream(newFd, FileAccess.Write);
+ 		}
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/BepInEx/Console/Windows/ConsoleWindow.cs b/BepInEx/Console/Windows/ConsoleWindow.cs
+index f325844..48dcaec 100644
+--- a/BepInEx/Console/Windows/ConsoleWindow.cs
++++ b/BepInEx/Console/Windows/ConsoleWindow.cs
+@@ -1,3 +1,4 @@
++using BepInEx.Unix;
+ ﻿// --------------------------------------------------
+ // UnityInjector - ConsoleWindow.cs
+ // Copyright (c) Usagirei 2015 - 2015
+diff --git a/BepInEx/PlatformCompat.cs b/BepInEx/PlatformCompat.cs
+new file mode 100644
+index 0000000..777957b
+--- /dev/null
++++ b/BepInEx/PlatformCompat.cs
+@@ -0,0 +1,63 @@
++using System;
++using MonoMod.Utils;
++
++namespace BepInEx
++{
++	/// <summary>
++	/// The platform flags BepInEx checks against.
++	/// </summary>
++	[Flags]
++	internal enum Platform
++	{
++		Unknown = 0,
++		Windows = 1 << 0,
++		MacOS = 1 << 1,
++		Linux = 1 << 2,
++		Unix = 1 << 3,
++		Bits64 = 1 << 4,
++		ARM = 1 << 5,
++	}
++
++	/// <summary>
++	/// Answers platform questions from MonoMod's detection.
++	/// </summary>
++	internal static class PlatformHelper
++	{
++		public static Platform Current
++		{
++			get
++			{
++				var os = PlatformDetection.OS;
++				var current = Platform.Unknown;
++
++				if (os.Is(OSKind.Windows)) current |= Platform.Windows;
++				if (os.Is(OSKind.OSX)) current |= Platform.MacOS | Platform.Unix;
++				if (os.Is(OSKind.Linux)) current |= Platform.Linux | Platform.Unix;
++				if (os.Is(OSKind.Posix)) current |= Platform.Unix;
++
++				if (IntPtr.Size >= 8) current |= Platform.Bits64;
++
++				var arch = PlatformDetection.Architecture;
++				if (arch == ArchitectureKind.Arm || arch == ArchitectureKind.Arm64) current |= Platform.ARM;
++
++				return current;
++			}
++		}
++
++		public static bool Is(Platform platform) => (Current & platform) == platform;
++	}
++}
++
++namespace BepInEx.Unix
++{
++	using System.Runtime.InteropServices;
++
++	/// <summary>
++	/// Turns a native function pointer into a delegate.
++	/// </summary>
++	internal static class NativePointerExtensions
++	{
++		public static T AsDelegate<T>(this System.IntPtr ptr) where T : class
++			=> Marshal.GetDelegateForFunctionPointer(ptr, typeof(T)) as T;
++	}
++}
+diff --git a/BepInExTests/BepInExTests.csproj b/BepInExTests/BepInExTests.csproj
+index 0233b79..9772fa5 100644
+--- a/BepInExTests/BepInExTests.csproj
++++ b/BepInExTests/BepInExTests.csproj
+@@ -1,6 +1,6 @@
+ ﻿<Project Sdk="Microsoft.NET.Sdk">
+     <PropertyGroup>
+-        <TargetFramework>net45</TargetFramework>
++        <TargetFramework>net472</TargetFramework>
+     </PropertyGroup>
+ 
+     <ItemGroup>

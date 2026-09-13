@@ -1,48 +1,51 @@
 # Native arm64
 
-Haldor runs the game on the x86_64 slice under Rosetta. Native arm64 is blocked by
-one specific thing, recorded here so the question does not get reopened from scratch.
+Haldor runs Valheim on the Apple Silicon slice with no translation layer. Getting
+there needed one change to BepInEx, recorded here.
 
-## The blocker
+## Why stock BepInEx cannot do it
 
-Apple Silicon enforces W^X: a page cannot be made writable and executable at once.
-MonoMod 22, which BepInEx bundles, patches code by calling `mprotect` for RWX. On
-arm64 macOS that call returns `EACCES`, so `DetourHelper.Runtime` fails to construct
-and every Harmony patch throws `IL Compile Error`.
+Apple Silicon enforces W^X: a page cannot be writable and executable at once. MonoMod
+22, which BepInEx bundles, patches code by calling `mprotect` for RWX. On arm64 macOS
+that returns `EACCES`, `DetourHelper.Runtime` fails to construct, and every Harmony
+patch throws `IL Compile Error`. Measured in-process:
 
-Measured in-process on arm64:
-
-    PlatformHelper.Current  = Bits64, MacOS, ARM       correct
-    DetourHelper.Native     = DetourNativeMonoPosixPlatform   correct
+    PlatformHelper.Current  = Bits64, MacOS, ARM            correct
+    DetourHelper.Native     = DetourNativeMonoPosixPlatform correct
     DetourHelper.Runtime   -> Exception: mprotect returned EACCES
 
-Architecture detection and ARM instruction encoding are both fine. Only the memory
-permission call fails.
+Architecture detection and ARM instruction encoding were never the problem. Only the
+memory permission call was.
 
-## What Rosetta costs
+## The fix
 
-Time from exec to main menu, vanilla, no BepInEx:
+BepInEx 5.4.23.5 rebuilt against MonoMod 25 and HarmonyX 2.16. MonoMod 25 toggles
+`pthread_jit_write_protect_np` instead of asking for RWX, which the game's existing
+`allow-jit` entitlement permits. Nothing is re-signed and no entitlement is added.
 
-    arm64    5.7s, 6.7s
-    x86_64  11.3s, 10.2s
+The result is in `bepinex-arm64/core`, and `bepinex-arm64/*.patch` reproduces it
+against upstream `v5.4.23.5`. Doorstop, the launcher script and every mod are
+upstream and unmodified.
 
-## Routes to native, and why none is taken
+The patch is 11 files, +103/-347:
 
-**MonoMod 25.** `MonoMod.Core` 1.3.6 carries `Arm64Arch`, `MacOSSystem` and
-`pthread_jit_write_protect_np`, which is the correct W^X handling and works under the
-`allow-jit` entitlement the game already has. BepInEx cannot consume it as a drop-in:
-MonoMod 25 removed `MonoMod.Utils.Platform` and the `DynDllImport` attributes, both of
-which BepInEx calls, so it fails with `TypeLoadException`. BepInEx must be recompiled.
-Upstream has not done this: BepInEx master still pins HarmonyX 2.10.2 and
-MonoMod.Utils 22.7.31, and BepInEx 5 pins HarmonyX 2.9 and MonoMod 22.1.29. The port
-surface is 11 files and about 17 call sites.
+- `PlatformCompat.cs` reimplements `PlatformHelper` and `Platform` on MonoMod 25's
+  `PlatformDetection`, so existing call sites are untouched.
+- `UnixStreamHelper` uses `DllImport` instead of the removed `DynDllImport`.
+- `PlatformUtils.SetPlatform` is deleted; MonoMod 25 detects the platform itself.
+- `XTermFix` is deleted; it existed to work around MonoMod 22's platform detection.
+- `HarmonyX2Interop` is dropped from the build. It produces `0Harmony20.dll` for mods
+  built against Harmony 2.0, and nothing in the pack references it.
+- Target framework moves from net35 to net472, which is what Unity's Mono is.
 
-**A replacement native platform.** `DetourHelper.Native` is settable, so an
-`IDetourNativePlatform` that toggles `pthread_jit_write_protect_np` instead of calling
-`mprotect` can be injected without touching BepInEx. Attempted: the game hangs during
-detour setup, because the toggle applies to the whole thread and Mono then stalls
-executing JIT code from it. Correct scoping is the same problem MonoMod 25 solves.
+`System.ValueTuple.dll` ships alongside because MonoMod 25 references it and the game
+provides no such assembly. It is the net461 build, a pure forwarder to mscorlib, where
+the type actually lives. The net452 build does not work: it pulls in `System.Collections`,
+which Mono does not have.
 
-**Adding `com.apple.security.cs.allow-unsigned-executable-memory`.** Re-signing the app
-with this entitlement would let the RWX `mprotect` succeed. It weakens the app's
-hardening and is the wrong fix, since `allow-jit` plus the proper API already suffices.
+## Diagnosing a failed preload
+
+BepInEx writes preload exceptions to `preloader_<timestamp>.log` beside the executable,
+which on macOS is inside the bundle at `valheim.app/Contents/MacOS/`. Nothing reaches
+`BepInEx/LogOutput.log` when preloading fails, because the logger is not up yet. Files
+written there also break the bundle's code signature seal.
