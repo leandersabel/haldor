@@ -138,14 +138,16 @@ def install(pack: str, extras: list[str]) -> None:
     bep = game / "BepInEx"
     for d in ("plugins", "patchers", "core"):
         shutil.rmtree(bep / d, ignore_errors=True)
+    print(f"⏺ Resolving {pack}")
     deps = resolve(pack, extras)
+    print("⏺ Installing")
     for dep in deps:
-        print(f"  {dep}")
+        print(f"  ⎿  {dep}")
         install_mod(dep, bep)
     install_loader(game)
     (bep / "haldor.json").write_text(
         json.dumps({"pack": pack, "extras": extras, "mods": deps}, indent=2))
-    print(f"{len(deps)} packages installed into {game}")
+    print(f"⏺ Installed into {game}")
 
 
 def state() -> dict:

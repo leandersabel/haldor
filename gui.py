@@ -7,13 +7,28 @@ import queue
 import subprocess
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 import urllib.parse
-from tkinter import ttk
+from pathlib import Path
 
 import haldor
 
-PAD = 16
+# The terminal's own colors, dark. State is blue and amber rather than green and
+# red, the way the daltonized theme next to this window has it.
+BG, FG, BRIGHT, DIM, LINE = "#1e2029", "#a0b3cc", "#bdcde1", "#6a7488", "#2d3450"
+BLUE, CYAN, AMBER, MAGENTA = "#6db1f7", "#56b6c2", "#e5c07b", "#c678dd"
+PAD = 18
 SOURCE = urllib.parse.urlsplit(haldor.API).hostname
+# The tag out of the download URL, so the footer cannot drift from the install.
+LOADER = haldor.BEPINEX.split("/download/v")[1].split("/")[0]
+# Enough of the game path to tell two Steam libraries apart, and no wider than
+# the header.
+KEEP = 4
+
+
+def shorten(path: Path) -> str:
+    parts = path.parts[-KEEP:]
+    return ("…/" if len(path.parts) > KEEP else "") + "/".join(parts)
 
 
 class Relay(io.TextIOBase):
@@ -27,82 +42,147 @@ class Relay(io.TextIOBase):
         return len(text)
 
 
-class App(ttk.Frame):
-    """The mod list on top, what Haldor is saying below."""
+class App(tk.Frame):
+    """A terminal pane. What to install on top, what happened below."""
 
     def __init__(self, master: tk.Tk):
-        super().__init__(master, padding=PAD)
+        # MesloLGS NF is the terminal's font. Menlo is on every Mac.
+        self.family = "MesloLGS NF" if "MesloLGS NF" in tkfont.families() else "Menlo"
+        master.option_add("*Frame.background", BG)
+        master.option_add("*Label.background", BG)
+        master.option_add("*Label.foreground", FG)
+        master.option_add("*Label.font", "{%s} 13" % self.family)
+        super().__init__(master, bg=BG, padx=PAD, pady=14)
+
         self.messages: queue.Queue = queue.Queue()
         self.game = None
         self.failure = None
-        self.pack = tk.StringVar()
+        self.working = False
+        self.buttons: list = []
+        self.modpack = tk.StringVar()
+        self.where = tk.StringVar()
         self.status = tk.StringVar()
 
         master.title("Haldor")
-        master.minsize(520, 480)
-        master.columnconfigure(0, weight=1)
-        master.rowconfigure(0, weight=1)
-        self.grid(sticky="nsew")
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(5, weight=1)
-        self.rowconfigure(8, weight=2)
+        master.minsize(560, 520)
+        master.configure(bg=BG)
+        self.pack(fill="both", expand=True)
 
-        ttk.Label(self, text="Source").grid(row=0, column=0, sticky="w")
-        # Thunderstore is the only index Haldor reads. The host comes off the
-        # API so it cannot drift from it.
-        ttk.Label(self, text=SOURCE).grid(row=1, column=0, sticky="w", pady=(4, PAD))
+        head = tk.Frame(self)
+        head.pack(fill="x")
+        tk.Label(head, text="haldor", fg=BRIGHT,
+                 font=self.font(weight="bold")).pack(side="left")
+        tk.Label(head, text=SOURCE, fg=CYAN).pack(side="right")
+        tk.Label(head, textvariable=self.where, fg=DIM).pack(side="left", padx=(10, 0))
+        tk.Frame(self, bg=LINE, height=1).pack(fill="x", pady=(10, 16))
 
-        ttk.Label(self, text="Modpack").grid(row=2, column=0, sticky="w")
-        entry = ttk.Entry(self, textvariable=self.pack)
-        entry.grid(row=3, column=0, sticky="ew", pady=(4, PAD))
+        # The footer first, so a short window takes its space out of the log.
+        self.foot()
+        self.fields()
+        self.bar()
+        self.console = self.log()
 
-        ttk.Label(self, text="Extras, one namespace/name per line").grid(row=4, column=0, sticky="w")
-        self.extras = self.text(height=5)
-        self.extras.grid(row=5, column=0, sticky="nsew", pady=(4, PAD))
-
-        bar = ttk.Frame(self)
-        bar.grid(row=6, column=0, sticky="ew")
-        bar.columnconfigure(1, weight=1)
-        self.install = ttk.Button(bar, text="Install", command=self.do_install)
-        self.install.grid(row=0, column=0)
-        self.launch = ttk.Button(bar, text="Play", command=self.do_play)
-        self.launch.grid(row=0, column=2)
-
-        ttk.Separator(self).grid(row=7, column=0, sticky="ew", pady=PAD)
-        self.console = self.text(height=10, wrap="word",
-                                 font="TkFixedFont", state="disabled")
-        self.console.grid(row=8, column=0, sticky="nsew")
-        ttk.Label(self, textvariable=self.status).grid(row=9, column=0, sticky="w", pady=(PAD, 0))
-
-        entry.focus_set()
+        self.entry.focus_set()
         self.load()
         self.pump()
 
-    def text(self, **kw) -> tk.Text:
-        """A text box that sits flat in the layout."""
-        return tk.Text(self, relief="flat", padx=8, pady=6,
-                       highlightthickness=1, **kw)
+    def font(self, size: int = 13, weight: str = "normal") -> tuple:
+        return self.family, size, weight
+
+    # The window
+
+    def prompt(self, label: str) -> tk.Frame:
+        """A ❯ line, and the ruled space that its field sits in."""
+        row = tk.Frame(self)
+        row.pack(fill="x", pady=(0, 14))
+        tk.Label(row, text="❯", fg=BLUE,
+                 font=self.font(weight="bold")).pack(side="left", anchor="n")
+        tk.Label(row, text=f" {label} ", fg=MAGENTA).pack(side="left", anchor="n")
+        box = tk.Frame(row)
+        box.pack(side="left", fill="x", expand=True)
+        return box
+
+    def fields(self) -> None:
+        box = self.prompt("modpack")
+        self.entry = tk.Entry(box, textvariable=self.modpack, font=self.font(),
+                              bg=BG, fg=BRIGHT, relief="flat", highlightthickness=0,
+                              insertbackground=BLUE, selectbackground=LINE,
+                              selectforeground=BRIGHT)
+        self.entry.pack(fill="x")
+        self.entry.bind("<Return>", lambda e: self.do_install())
+        tk.Frame(box, bg=LINE, height=1).pack(fill="x", pady=(4, 0))
+
+        box = self.prompt("extras ")
+        self.extras = tk.Text(box, height=3, font=self.font(), bg=BG, fg=BRIGHT,
+                              relief="flat", highlightthickness=0, padx=0, pady=0,
+                              wrap="none", insertbackground=BLUE,
+                              selectbackground=LINE, selectforeground=BRIGHT)
+        self.extras.pack(fill="x")
+        tk.Frame(box, bg=LINE, height=1).pack(fill="x", pady=(4, 0))
+
+    def bar(self) -> None:
+        bar = tk.Frame(self)
+        bar.pack(fill="x", pady=(2, 14))
+        self.button(bar, "install", BLUE, self.do_install)
+        self.button(bar, "play", CYAN, self.do_play)
+
+    def button(self, bar: tk.Frame, text: str, color: str, command) -> None:
+        """A bracketed word. Tk's own button takes no color on macOS."""
+        button = tk.Label(bar, text=f"[ {text} ]", fg=color, cursor="pointinghand",
+                          font=self.font(weight="bold"))
+        button.pack(side="left", padx=(0, 14))
+        button.bind("<Button-1>", lambda e: None if self.working else command())
+        button.bind("<Enter>", lambda e: button.configure(fg=DIM if self.working else BRIGHT))
+        button.bind("<Leave>", lambda e: button.configure(fg=DIM if self.working else color))
+        self.buttons.append((button, color))
+
+    def log(self) -> tk.Text:
+        out = tk.Text(self, font=self.font(12), bg=BG, fg=FG, relief="flat",
+                      highlightthickness=1, highlightbackground=LINE,
+                      highlightcolor=LINE, padx=10, pady=8, wrap="none",
+                      state="disabled", selectbackground=LINE,
+                      selectforeground=BRIGHT)
+        out.pack(fill="both", expand=True)
+        out.tag_configure("step", foreground=BRIGHT)
+        out.tag_configure("detail", foreground=DIM)
+        out.tag_configure("error", foreground=AMBER)
+        # Configured last, so the dot keeps its color on a step line.
+        out.tag_configure("dot", foreground=BLUE)
+        return out
+
+    def foot(self) -> None:
+        foot = tk.Frame(self)
+        foot.pack(side="bottom", fill="x", pady=(12, 0))
+        self.dot = tk.Label(foot, text="●", fg=BLUE, font=self.font(11))
+        self.dot.pack(side="left")
+        tk.Label(foot, textvariable=self.status, fg=DIM,
+                 font=self.font(12)).pack(side="left", padx=(6, 0))
+        tk.Label(foot, text=f"arm64 · BepInEx {LOADER}", fg=DIM,
+                 font=self.font(11)).pack(side="right")
 
     def load(self) -> None:
-        """Fill the list from the install, if there is one."""
+        """Fill the window from the install, if there is one."""
         try:
             self.game = haldor.game_dir()
         except SystemExit as e:
-            self.busy(True, str(e))
-            return
+            self.failure = str(e)
+            return self.busy(True, str(e))
+        self.where.set(shorten(self.game))
         try:
             installed = haldor.state()
         except FileNotFoundError:
-            return self.status.set("Nothing installed yet")
-        self.pack.set(installed["pack"])
+            return self.busy(False, "nothing installed yet")
+        self.modpack.set(installed["pack"])
         self.extras.insert("1.0", "\n".join(installed.get("extras", [])))
-        self.say("\n".join(installed["mods"]) + "\n")
-        self.status.set("Ready")
+        self.say("⏺ Installed\n" + "".join(f"  ⎿  {mod}\n" for mod in installed["mods"]))
+        self.busy(False, "ready")
+
+    # What the buttons do
 
     def do_install(self) -> None:
-        pack = self.pack.get().strip()
+        pack = self.modpack.get().strip()
         if not pack:
-            return self.status.set("Name a modpack, such as MahMods/Trollheim")
+            return self.status.set("name a modpack, such as MahMods/Trollheim")
         # Read the list here. The worker thread must not touch a widget.
         extras = self.extras.get("1.0", "end").split()
         self.work(lambda: haldor.install(pack, extras))
@@ -110,7 +190,7 @@ class App(ttk.Frame):
     def do_play(self) -> None:
         script = self.game / "run_bepinex.sh"
         if not script.exists():
-            return self.status.set("Install first")
+            return self.status.set("install first")
         game = subprocess.Popen(["/bin/sh", script.name], cwd=script.parent,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.busy(True, "Valheim is running")
@@ -119,14 +199,14 @@ class App(ttk.Frame):
     def wait(self, game: subprocess.Popen) -> None:
         if game.poll() is None:
             return self.after(1000, self.wait, game)
-        self.busy(False, "Ready")
+        self.busy(False, "ready")
 
     # Running a job without freezing the window
 
     def work(self, job) -> None:
-        """Run the job off the main thread, its output replacing the console."""
-        self.busy(True, "Installing…")
+        """Run the job off the main thread, its output replacing the log."""
         self.failure = None
+        self.busy(True, "installing…")
         self.console.configure(state="normal")
         self.console.delete("1.0", "end")
         self.console.configure(state="disabled")
@@ -138,7 +218,7 @@ class App(ttk.Frame):
                     job()
             except (Exception, SystemExit) as e:
                 self.failure = f"{type(e).__name__}: {e}"
-                relay.write(self.failure + "\n")
+                relay.write(f"✗ {self.failure}\n")
             self.messages.put(None)
 
         threading.Thread(target=run, daemon=True).start()
@@ -151,7 +231,7 @@ class App(ttk.Frame):
             except queue.Empty:
                 break
             if message is None:
-                self.busy(False, self.failure or "Ready")
+                self.busy(False, self.failure or "ready")
             else:
                 self.say(message)
         self.after(100, self.pump)
@@ -159,13 +239,26 @@ class App(ttk.Frame):
     # Chrome
 
     def busy(self, working: bool, status: str) -> None:
-        for button in (self.install, self.launch):
-            button.state(["disabled" if working else "!disabled"])
+        self.working = working
+        for button, color in self.buttons:
+            button.configure(fg=DIM if working else color)
+        self.dot.configure(fg=AMBER if self.failure else CYAN if working else BLUE)
         self.status.set(status)
 
     def say(self, text: str) -> None:
+        """Write to the log, a step line and its details telling themselves apart."""
         self.console.configure(state="normal")
+        first = int(self.console.index("end-1c").split(".")[0])
         self.console.insert("end", text)
+        for line in range(first, int(self.console.index("end-1c").split(".")[0]) + 1):
+            head = self.console.get(f"{line}.0")
+            if head == "⏺":
+                self.console.tag_add("step", f"{line}.0", f"{line}.end")
+                self.console.tag_add("dot", f"{line}.0", f"{line}.1")
+            elif head == " ":
+                self.console.tag_add("detail", f"{line}.0", f"{line}.end")
+            elif head == "✗":
+                self.console.tag_add("error", f"{line}.0", f"{line}.end")
         self.console.see("end")
         self.console.configure(state="disabled")
 
