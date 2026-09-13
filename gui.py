@@ -59,6 +59,7 @@ class App(tk.Frame):
         self.running = None
         self.failure = None
         self.working = False
+        self.aimed = None
         self.buttons: list = []
         self.modpack = tk.StringVar()
         self.where = tk.StringVar()
@@ -72,6 +73,8 @@ class App(tk.Frame):
         with contextlib.suppress(tk.TclError):
             master.tk.call("::tk::unsupported::MacWindowStyle", "appearance",
                            master, "darkaqua")
+        master.bind("<Activate>", lambda e: self.activated(True))
+        master.bind("<Deactivate>", lambda e: self.activated(False))
         self.pack(fill="both", expand=True)
 
         head = tk.Frame(self)
@@ -138,9 +141,25 @@ class App(tk.Frame):
                           font=self.font(weight="bold"))
         button.pack(side="left", padx=(0, 14))
         button.bind("<Button-1>", lambda e: None if self.working else command())
-        button.bind("<Enter>", lambda e: button.configure(fg=DIM if self.working else BRIGHT))
-        button.bind("<Leave>", lambda e: button.configure(fg=DIM if self.working else color))
+        button.bind("<Enter>", lambda e: self.hover(button, BRIGHT, command))
+        button.bind("<Leave>", lambda e: self.hover(button, color, None))
         self.buttons.append((button, color))
+
+    def hover(self, button: tk.Label, color: str, command) -> None:
+        """Light the word, and take aim at what a click on it would run."""
+        button.configure(fg=DIM if self.working else color)
+        self.aimed = command
+
+    def activated(self, active: bool) -> None:
+        """Run what the click that made the window active was aimed at.
+
+        macOS spends that click on the window and Tk never sees it, so a button
+        under the pointer would swallow it. Leaving the app forgets the aim, so
+        returning by the keyboard or the Dock runs nothing.
+        """
+        command, self.aimed = self.aimed, None
+        if command and active and not self.working:
+            command()
 
     def log(self) -> tk.Text:
         out = tk.Text(self, font=self.font(12), bg=BG, fg=FG, relief="flat",
