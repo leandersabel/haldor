@@ -6,11 +6,13 @@ import queue
 import subprocess
 import threading
 import tkinter as tk
+import urllib.parse
 from tkinter import ttk
 
 import haldor
 
 PAD = 16
+SOURCE = urllib.parse.urlsplit(haldor.API).hostname
 
 
 class Relay:
@@ -43,29 +45,37 @@ class App(ttk.Frame):
         master.rowconfigure(0, weight=1)
         self.grid(sticky="nsew")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)
-        self.rowconfigure(6, weight=2)
+        self.rowconfigure(5, weight=1)
+        self.rowconfigure(8, weight=2)
 
-        ttk.Label(self, text="Modpack").grid(row=0, column=0, sticky="w")
+        ttk.Label(self, text="Source").grid(row=0, column=0, sticky="w")
+        # Everything below is named the way one index names it, and there is only
+        # the one. The list says so, reading the host off the API Haldor calls so
+        # the two cannot drift apart.
+        source = ttk.Combobox(self, values=[SOURCE], state="readonly", width=16)
+        source.current(0)
+        source.grid(row=1, column=0, sticky="w", pady=(4, PAD))
+
+        ttk.Label(self, text="Modpack").grid(row=2, column=0, sticky="w")
         entry = ttk.Entry(self, textvariable=self.pack)
-        entry.grid(row=1, column=0, sticky="ew", pady=(4, PAD))
+        entry.grid(row=3, column=0, sticky="ew", pady=(4, PAD))
 
-        ttk.Label(self, text="Extras, one namespace/name per line").grid(row=2, column=0, sticky="w")
-        self.extras = self.text(row=3, height=5)
+        ttk.Label(self, text="Extras, one namespace/name per line").grid(row=4, column=0, sticky="w")
+        self.extras = self.text(row=5, height=5)
         self.extras.grid(pady=(4, PAD))
 
         bar = ttk.Frame(self)
-        bar.grid(row=4, column=0, sticky="ew")
+        bar.grid(row=6, column=0, sticky="ew")
         bar.columnconfigure(1, weight=1)
         self.install = ttk.Button(bar, text="Install", command=self.do_install)
         self.install.grid(row=0, column=0)
         self.launch = ttk.Button(bar, text="Play", command=self.do_play)
         self.launch.grid(row=0, column=2)
 
-        ttk.Separator(self).grid(row=5, column=0, sticky="ew", pady=PAD)
-        self.console = self.text(row=6, height=10, wrap="word",
+        ttk.Separator(self).grid(row=7, column=0, sticky="ew", pady=PAD)
+        self.console = self.text(row=8, height=10, wrap="word",
                                  font="TkFixedFont", state="disabled")
-        ttk.Label(self, textvariable=self.status).grid(row=7, column=0, sticky="w", pady=(PAD, 0))
+        ttk.Label(self, textvariable=self.status).grid(row=9, column=0, sticky="w", pady=(PAD, 0))
 
         entry.focus_set()
         self.load()

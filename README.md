@@ -25,10 +25,11 @@ the pack, where `update` keeps it. The pack is still queued first, so an extra n
 moves a version the pack pins. Deleting the entry and running `update` drops the mod.
 `install` starts from the pack alone.
 
-`gui` opens a window on the same state: the modpack, the extras beside it, Install
-and Play. Install applies whatever the window shows, so editing the extras there and
-installing covers both `add` and dropping a mod. Tkinter comes with Python, so the
-window needs nothing installed.
+`gui` opens a window on the same state: the source, the modpack, the extras beside
+it, Install and Play. The source list names `thunderstore.io` and holds nothing else,
+because that is the only index Haldor reads. Install applies whatever the window
+shows, so editing the extras there and installing covers both `add` and dropping a
+mod. Tkinter comes with Python, so the window needs nothing installed.
 
 `make-app.sh` builds `Haldor.app` beside it, which opens the same window from Finder
 or the Dock. The bundle is a launcher and an icon, naming this checkout and the
