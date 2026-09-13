@@ -56,6 +56,7 @@ class App(tk.Frame):
 
         self.messages: queue.Queue = queue.Queue()
         self.game = None
+        self.running = None
         self.failure = None
         self.working = False
         self.buttons: list = []
@@ -185,6 +186,8 @@ class App(tk.Frame):
     # What the buttons do
 
     def do_install(self) -> None:
+        if self.playing():
+            return self.status.set("quit the game first")
         pack = self.modpack.get().strip()
         if not pack:
             return self.status.set("name a modpack, such as MahMods/Trollheim")
@@ -193,17 +196,26 @@ class App(tk.Frame):
         self.work(lambda: haldor.install(pack, extras))
 
     def do_play(self) -> None:
+        if self.playing():
+            # A second one starts happily and helps nobody, so raise the first.
+            subprocess.run(["open", "-a", str(self.game / "valheim.app")], check=False)
+            return self.status.set("Valheim is already running")
         script = self.game / "run_bepinex.sh"
         if not script.exists():
             return self.status.set("install first")
-        game = subprocess.Popen(["/bin/sh", script.name], cwd=script.parent,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.busy(True, "Valheim is running")
-        self.wait(game)
+        self.running = subprocess.Popen(["/bin/sh", script.name], cwd=script.parent,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # The buttons stay live while the game runs. Only a job takes them away.
+        self.dot.configure(fg=CYAN)
+        self.status.set("Valheim is running")
+        self.wait()
 
-    def wait(self, game: subprocess.Popen) -> None:
-        if game.poll() is None:
-            return self.after(1000, self.wait, game)
+    def playing(self) -> bool:
+        return self.running is not None and self.running.poll() is None
+
+    def wait(self) -> None:
+        if self.playing():
+            return self.after(1000, self.wait)
         self.busy(False, "ready")
 
     # Running a job without freezing the window
