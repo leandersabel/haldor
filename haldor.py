@@ -17,6 +17,13 @@ BEPINEX = ("https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5"
 STEAM = Path.home() / "Library/Application Support/Steam"
 # Beside this file, or inside the app bundle once PyInstaller has unpacked it.
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+
+# The app bundle brings its own Python, which has no trust store to verify
+# thunderstore.io against, so it brings certificates too. A checkout has neither and
+# uses whatever its own Python trusts.
+CERTS = HERE / "certs" / "cacert.pem"
+if CERTS.exists():
+    os.environ.setdefault("SSL_CERT_FILE", str(CERTS))
 CACHE = Path.home() / "Library/Caches/haldor"
 
 

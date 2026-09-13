@@ -23,12 +23,14 @@ done
 iconutil -c icns "$work/icon.iconset" -o "$work/Haldor.icns"
 
 python3 -m venv "$work/venv"
-"$work/venv/bin/pip" install --quiet --disable-pip-version-check pyinstaller
+"$work/venv/bin/pip" install --quiet --disable-pip-version-check pyinstaller certifi
+certs=$("$work/venv/bin/python" -c 'import certifi; print(certifi.where())')
 
 "$work/venv/bin/pyinstaller" --noconfirm --clean --log-level WARN \
 	--windowed --name Haldor --icon "$work/Haldor.icns" \
 	--osx-bundle-identifier io.github.leandersabel.haldor \
 	--add-data "$here/bepinex-arm64/core:bepinex-arm64/core" \
+	--add-data "$certs:certs" \
 	--distpath "$work/dist" --workpath "$work/build" --specpath "$work" \
 	"$here/gui.py"
 
