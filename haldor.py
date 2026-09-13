@@ -39,16 +39,22 @@ def fetch(url: str) -> bytes:
     return cached.read_bytes()
 
 
-def resolve(pack: str) -> list[str]:
-    """Expand a namespace/name reference into a flat list of pinned dependencies."""
-    ns, name = pack.split("/")
-    latest = json.loads(fetch(f"{API}/{ns}/{name}/"))["latest"]
-    seen, queue, order = set(), list(latest["dependencies"]), []
+def latest(pkg: str) -> dict:
+    """The newest published version of a namespace/name reference."""
+    ns, name = pkg.split("/")
+    return json.loads(fetch(f"{API}/{ns}/{name}/"))["latest"]
+
+
+def resolve(pack: str, extras: list[str]) -> list[str]:
+    """Expand a pack and the extras beside it into a flat list of pinned dependencies."""
+    queue = latest(pack)["dependencies"] + [latest(e)["full_name"] for e in extras]
+    seen, order = set(), []
     while queue:
         dep = queue.pop(0)
         *parts, version = dep.split("-")
         pkg = "-".join(parts)
-        # The pack pins its own versions; a transitive edge only fills a gap.
+        # The pack pins its own versions and is queued first, so an extra or a
+        # transitive edge only fills a gap.
         if pkg in seen:
             continue
         seen.add(pkg)
@@ -106,18 +112,23 @@ def install_loader(game: Path) -> None:
     subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(game)], capture_output=True)
 
 
-def install(pack: str) -> None:
+def install(pack: str, extras: list[str]) -> None:
     game = game_dir()
     bep = game / "BepInEx"
     for d in ("plugins", "patchers", "core"):
         shutil.rmtree(bep / d, ignore_errors=True)
-    deps = resolve(pack)
+    deps = resolve(pack, extras)
     for dep in deps:
         print(f"  {dep}")
         install_mod(dep, bep)
     install_loader(game)
-    (bep / "haldor.json").write_text(json.dumps({"pack": pack, "mods": deps}, indent=2))
+    (bep / "haldor.json").write_text(
+        json.dumps({"pack": pack, "extras": extras, "mods": deps}, indent=2))
     print(f"{len(deps)} packages installed into {game}")
+
+
+def state() -> dict:
+    return json.loads((game_dir() / "BepInEx/haldor.json").read_text())
 
 
 def play() -> None:
@@ -129,13 +140,19 @@ def play() -> None:
 def main() -> None:
     match sys.argv[1:]:
         case ["install", pack]:
-            install(pack)
+            install(pack, [])
+        case ["add", pkg]:
+            s = state()
+            extras = s.get("extras", [])
+            install(s["pack"], extras if pkg in extras else extras + [pkg])
         case ["update"]:
-            install(json.loads((game_dir() / "BepInEx/haldor.json").read_text())["pack"])
+            s = state()
+            install(s["pack"], s.get("extras", []))
         case ["play"]:
             play()
         case _:
-            sys.exit("usage: haldor (install <namespace/pack> | update | play)")
+            sys.exit("usage: haldor "
+                     "(install <namespace/pack> | add <namespace/name> | update | play)")
 
 
 if __name__ == "__main__":

@@ -10,12 +10,18 @@ through Doorstop.
 ## Usage
 
     ./haldor.py install MahMods/Trollheim
+    ./haldor.py add DrummerCraig/ShaderHelperForMac
     ./haldor.py update
     ./haldor.py play
 
 `install` pins every version the pack names. Where a mod asks for an older version
 of something the pack already pins, the pack wins, so the install matches what the
 other players run.
+
+`add` records a package in `extras` in `BepInEx/haldor.json` and installs it beside
+the pack, where `update` keeps it. The pack is still queued first, so an extra never
+moves a version the pack pins. Deleting the entry and running `update` drops the mod.
+`install` starts from the pack alone.
 
 ## Why it is built this way
 
@@ -40,6 +46,9 @@ macOS player accepts.
 Mod-supplied shaders have no Metal variants, logged as `Desired shader compiler
 platform 14 is not available in shader blob`. Custom content added by mods can render
 untextured. Vanilla assets are unaffected.
+
+`DrummerCraig/ShaderHelperForMac` remaps the affected materials at runtime and is
+installed as an extra. It does not reach every mod.
 
 ## Diagnosing a failed preload
 
