@@ -1,0 +1,14 @@
+version: 2
+
+updates:
+  # Actions are pinned by major tag, which moves silently. A new major is the thing
+  # worth reading. The other pins are out of reach here: make-app.sh, and the
+  # hand-chosen package versions in bepinex-arm64/*.patch.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      # One pull request, not one per action.
+      actions:
+        patterns: ["*"]
