@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build Haldor.app, the window as a double-clickable app. PyInstaller puts a Python
 # and Tk inside the bundle, so the app needs nothing installed. CI runs this script.
-# Building it here needs a python3 with tkinter and a network.
+# Building it here needs a network and what the Brewfile names: brew bundle.
 set -e
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -9,7 +9,12 @@ version=${VERSION:-0.0.0}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-python3 -c 'import tkinter'
+# The Brewfile names the Python that carries Tk 9, and its version names the binary,
+# so the two cannot drift apart.
+pyver=$(sed -n 's/^brew "python-tk@\(.*\)"/\1/p' "$here/Brewfile")
+python="$(brew --prefix)/bin/python$pyver"
+"$python" -c 'import tkinter' 2>/dev/null ||
+	{ echo "no python$pyver with Tk. run: brew bundle --file $here/Brewfile" >&2; exit 1; }
 
 # QuickLook rasterizes the icon, sips cuts the sizes, iconutil packs them.
 qlmanage -t -s 1024 -o "$work" "$here/icon.svg" >/dev/null
@@ -22,7 +27,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$work/icon.iconset" -o "$work/Haldor.icns"
 
-python3 -m venv "$work/venv"
+"$python" -m venv "$work/venv"
 "$work/venv/bin/pip" install --quiet --disable-pip-version-check pyinstaller certifi
 certs=$("$work/venv/bin/python" -c 'import certifi; print(certifi.where())')
 

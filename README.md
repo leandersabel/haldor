@@ -23,8 +23,7 @@ mod. `install` starts from the pack alone.
 `gui.py` opens a window on the same state: the modpack, the extras, install and play.
 Install applies whatever the window shows, so editing the extras there covers both `add`
 and dropping a mod. The window is a dark terminal pane, set in MesloLGS NF where that is
-installed and Menlo otherwise. It needs a `python3` whose Tk is 8.6. The Tk that macOS
-ships with its own `python3` is 8.5, which hangs on the first redraw.
+installed and Menlo otherwise. It needs the Python the `Brewfile` names: `brew bundle`.
 
 ## The app
 
