@@ -28,7 +28,11 @@ done
 iconutil -c icns "$work/icon.iconset" -o "$work/Haldor.icns"
 
 "$python" -m venv "$work/venv"
-"$work/venv/bin/pip" install --quiet --disable-pip-version-check pyinstaller certifi
+# PyInstaller is pinned: it decides the bundle's layout, and a release of it can
+# change that under an unchanged tag of this. certifi is a trust store rather than a
+# library, so it floats and every build carries the roots current on the day.
+"$work/venv/bin/pip" install --quiet --disable-pip-version-check \
+	"pyinstaller==6.22.3" "certifi>=2026.7.22"
 certs=$("$work/venv/bin/python" -c 'import certifi; print(certifi.where())')
 
 "$work/venv/bin/pyinstaller" --noconfirm --clean --log-level WARN \
