@@ -7,13 +7,15 @@ import os
 import re
 import shutil
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 
 API = "https://thunderstore.io/api/experimental/package"
-BEPINEX = ("https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5"
-           "/BepInEx_macos_universal_5.4.23.5.zip")
+BEPINEX_VERSION = "5.4.23.5"
+BEPINEX = (f"https://github.com/BepInEx/BepInEx/releases/download/v{BEPINEX_VERSION}"
+           f"/BepInEx_macos_universal_{BEPINEX_VERSION}.zip")
 STEAM = Path.home() / "Library/Application Support/Steam"
 # Beside this file, or inside the app bundle once PyInstaller has unpacked it.
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
@@ -27,20 +29,34 @@ if CERTS.exists():
     os.environ.setdefault("SSL_CERT_FILE", str(CERTS))
 
 
+class HaldorError(Exception):
+    """A condition the user can act on. Both front ends show its message and stop."""
+
+
+class NotInstalled(HaldorError):
+    """No modpack has been laid down in this game yet."""
+
+
 def game_dir() -> Path:
     """Locate the Valheim install through Steam's library index."""
-    vdf = (STEAM / "steamapps/libraryfolders.vdf").read_text()
-    for lib in re.findall(r'"path"\s+"([^"]+)"', vdf):
+    vdf = STEAM / "steamapps/libraryfolders.vdf"
+    if not vdf.exists():
+        raise HaldorError("Steam not found")
+    for lib in re.findall(r'"path"\s+"([^"]+)"', vdf.read_text()):
         d = Path(lib) / "steamapps/common/Valheim"
         if (d / "valheim.app").is_dir():
             return d
-    sys.exit("Valheim not found in any Steam library")
+    raise HaldorError("Valheim not found in any Steam library")
 
 
 def get(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "haldor"})
-    with urllib.request.urlopen(req) as r:
-        return r.read()
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.read()
+    except urllib.error.URLError as e:
+        # HTTPError is a URLError, so a wrong name and a dead network both land here.
+        raise HaldorError(f"{url}: {e.reason}") from None
 
 
 def fetch(url: str) -> bytes:
@@ -133,50 +149,60 @@ def install_loader(game: Path) -> None:
     script.chmod(0o755)
 
 
-def install(pack: str, extras: list[str]) -> None:
+def install(pack: str, extras: list[str], log=print) -> None:
     game = game_dir()
     bep = game / "BepInEx"
     for d in ("plugins", "patchers", "core"):
         shutil.rmtree(bep / d, ignore_errors=True)
-    print(f"⏺ Resolving {pack}")
+    log(f"⏺ Resolving {pack}")
     deps = resolve(pack, extras)
-    print("⏺ Installing")
+    log("⏺ Installing")
     for dep in deps:
-        print(f"  ⎿  {dep}")
+        log(f"  ⎿  {dep}")
         install_mod(dep, bep)
     install_loader(game)
     (bep / "haldor.json").write_text(
         json.dumps({"pack": pack, "extras": extras, "mods": deps}, indent=2))
-    print(f"⏺ Installed into {game}")
+    log(f"⏺ Installed into {game}")
 
 
 def state() -> dict:
-    return json.loads((game_dir() / "BepInEx/haldor.json").read_text())
+    """What the last install recorded: the pack, its extras and the pinned mods."""
+    path = game_dir() / "BepInEx/haldor.json"
+    if not path.exists():
+        raise NotInstalled("nothing installed yet")
+    return json.loads(path.read_text())
 
 
 def play() -> None:
     game = game_dir()
+    script = game / "run_bepinex.sh"
+    if not script.exists():
+        raise NotInstalled("nothing installed yet")
     os.chdir(game)
-    os.execv("/bin/sh", ["sh", str(game / "run_bepinex.sh")])
+    os.execv("/bin/sh", ["sh", str(script)])
 
 
 def main() -> None:
     # Plain ifs, not match, so any python3 can run the command line.
     args = sys.argv[1:]
-    if args[:1] == ["install"] and len(args) == 2:
-        install(args[1], [])
-    elif args[:1] == ["add"] and len(args) == 2:
-        s = state()
-        extras = s.get("extras", [])
-        install(s["pack"], extras if args[1] in extras else extras + [args[1]])
-    elif args == ["update"]:
-        s = state()
-        install(s["pack"], s.get("extras", []))
-    elif args == ["play"]:
-        play()
-    else:
-        sys.exit("usage: haldor "
-                 "(install <namespace/pack> | add <namespace/name> | update | play)")
+    try:
+        if args[:1] == ["install"] and len(args) == 2:
+            install(args[1], [])
+        elif args[:1] == ["add"] and len(args) == 2:
+            s = state()
+            extras = s.get("extras", [])
+            install(s["pack"], extras if args[1] in extras else extras + [args[1]])
+        elif args == ["update"]:
+            s = state()
+            install(s["pack"], s.get("extras", []))
+        elif args == ["play"]:
+            play()
+        else:
+            sys.exit("usage: haldor "
+                     "(install <namespace/pack> | add <namespace/name> | update | play)")
+    except HaldorError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 """A window for Haldor: keep the mod list, install it, launch the game."""
 
 import contextlib
-import io
 import queue
 import subprocess
 import threading
@@ -19,8 +18,6 @@ BG, FG, BRIGHT, DIM, LINE = "#1e2029", "#a0b3cc", "#bdcde1", "#6a7488", "#2d3450
 BLUE, CYAN, AMBER, MAGENTA = "#6db1f7", "#56b6c2", "#e5c07b", "#c678dd"
 PAD = 18
 SOURCE = urllib.parse.urlsplit(haldor.API).hostname
-# The tag out of the download URL, so the footer cannot drift from the install.
-LOADER = haldor.BEPINEX.split("/download/v")[1].split("/")[0]
 # Enough of the game path to tell two Steam libraries apart, and no wider than
 # the header.
 KEEP = 4
@@ -29,17 +26,6 @@ KEEP = 4
 def shorten(path: Path) -> str:
     parts = path.parts[-KEEP:]
     return ("…/" if len(path.parts) > KEEP else "") + "/".join(parts)
-
-
-class Relay(io.TextIOBase):
-    """Stands in for stdout while a job runs, handing its text to the window."""
-
-    def __init__(self, out: queue.Queue):
-        self.out = out
-
-    def write(self, text: str) -> int:
-        self.out.put(text)
-        return len(text)
 
 
 class App(tk.Frame):
@@ -177,20 +163,20 @@ class App(tk.Frame):
         self.dot.pack(side="left")
         tk.Label(foot, textvariable=self.status, fg=DIM,
                  font=self.font(12)).pack(side="left", padx=(6, 0))
-        tk.Label(foot, text=f"arm64 · BepInEx {LOADER}", fg=DIM,
+        tk.Label(foot, text=f"arm64 · BepInEx {haldor.BEPINEX_VERSION}", fg=DIM,
                  font=self.font(11)).pack(side="right")
 
     def load(self) -> None:
         """Fill the window from the install, if there is one."""
         try:
             self.game = haldor.game_dir()
-        except SystemExit as e:
+        except haldor.HaldorError as e:
             self.failure = str(e)
             return self.busy(True, str(e))
         self.where.set(shorten(self.game))
         try:
             installed = haldor.state()
-        except FileNotFoundError:
+        except haldor.NotInstalled:
             return self.busy(False, "nothing installed yet")
         self.modpack.set(installed["pack"])
         self.extras.insert("1.0", "\n".join(installed.get("extras", [])))
@@ -207,7 +193,7 @@ class App(tk.Frame):
             return self.status.set("name a modpack, such as MahMods/Trollheim")
         # Read the list here. The worker thread must not touch a widget.
         extras = self.extras.get("1.0", "end").split()
-        self.work(lambda: haldor.install(pack, extras))
+        self.work(lambda log: haldor.install(pack, extras, log))
 
     def do_play(self) -> None:
         if self.playing():
@@ -235,7 +221,7 @@ class App(tk.Frame):
     # Running a job without freezing the window
 
     def work(self, job) -> None:
-        """Run the job off the main thread, its output replacing the log."""
+        """Run the job off the main thread, the lines it logs replacing the log."""
         self.failure = None
         self.busy(True, "installing…")
         self.console.configure(state="normal")
@@ -243,13 +229,17 @@ class App(tk.Frame):
         self.console.configure(state="disabled")
 
         def run() -> None:
-            relay = Relay(self.messages)
+            def line(text: str) -> None:
+                self.messages.put(text + "\n")
+
             try:
-                with contextlib.redirect_stdout(relay):
-                    job()
-            except (Exception, SystemExit) as e:
+                job(line)
+            except haldor.HaldorError as e:
+                self.failure = str(e)
+            except Exception as e:
                 self.failure = f"{type(e).__name__}: {e}"
-                relay.write(f"✗ {self.failure}\n")
+            if self.failure:
+                line(f"✗ {self.failure}")
             self.messages.put(None)
 
         threading.Thread(target=run, daemon=True).start()
