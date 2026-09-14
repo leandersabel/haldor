@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install a Thunderstore modpack into the macOS build of Valheim and launch it."""
 
+import hashlib
 import io
 import json
 import os
@@ -16,6 +17,9 @@ API = "https://thunderstore.io/api/experimental/package"
 BEPINEX_VERSION = "5.4.23.5"
 BEPINEX = (f"https://github.com/BepInEx/BepInEx/releases/download/v{BEPINEX_VERSION}"
            f"/BepInEx_macos_universal_{BEPINEX_VERSION}.zip")
+# The loader runs inside the game, and a release asset can be replaced under a tag
+# that does not move. shasum -a 256 on what the URL above serves.
+BEPINEX_SHA256 = "01c2ae782eb016dfd6c345a18dbd2dcafffb3d9d318449d6486689f426b4a323"
 STEAM = Path.home() / "Library/Application Support/Steam"
 # Beside this file, or inside the app bundle once PyInstaller has unpacked it.
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
@@ -59,13 +63,20 @@ def get(url: str) -> bytes:
         raise HaldorError(f"{url}: {e.reason}") from None
 
 
-def fetch(url: str) -> bytes:
+def fetch(url: str, sha256: str = "") -> bytes:
     """Cache a URL whose body cannot change: a pinned version or a download."""
     cached = CACHE / re.sub(r"[^\w.-]", "_", url)
     if not cached.exists():
         CACHE.mkdir(parents=True, exist_ok=True)
-        cached.write_bytes(get(url))
-    return cached.read_bytes()
+        # Moved into place whole, so a download cut short leaves nothing to trust.
+        partial = cached.parent / (cached.name + ".partial")
+        partial.write_bytes(get(url))
+        partial.replace(cached)
+    data = cached.read_bytes()
+    if sha256 and hashlib.sha256(data).hexdigest() != sha256:
+        cached.unlink()
+        raise HaldorError(f"{url} is not the file it should be")
+    return data
 
 
 def latest(pkg: str) -> dict:
@@ -97,11 +108,8 @@ def resolve(pack: str, extras: list[str]) -> list[str]:
     return order
 
 
-def install_mod(dep: str, bep: Path) -> None:
-    """Unpack one Thunderstore package, honouring its layout."""
-    pkg, version = split(dep)
-    data = fetch(f"https://thunderstore.io/package/download/{pkg}/{version}/")
-    zf = zipfile.ZipFile(io.BytesIO(data))
+def unpack(zf: zipfile.ZipFile, bep: Path, pkg: str) -> None:
+    """Write out one Thunderstore package, honouring its layout."""
     names = zf.namelist()
 
     # A package that carries its own BepInEx tree overlays the game root.
@@ -117,8 +125,17 @@ def install_mod(dep: str, bep: Path) -> None:
         if n.endswith("/") or not n.startswith(strip):
             continue
         target = dest / n[len(strip):]
+        # An entry that climbs out of dest would write anywhere on the disk.
+        if not target.resolve().is_relative_to(dest.resolve()):
+            raise HaldorError(f"{pkg} writes outside the install: {n}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(zf.read(n))
+
+
+def install_mod(dep: str, bep: Path) -> None:
+    pkg, version = split(dep)
+    data = fetch(f"https://thunderstore.io/package/download/{pkg}/{version}/")
+    unpack(zipfile.ZipFile(io.BytesIO(data)), bep, pkg)
 
 
 def install_loader(game: Path) -> None:
@@ -128,7 +145,7 @@ def install_loader(game: Path) -> None:
     Apple Silicon refuses that, so the core here is rebuilt against MonoMod 25.
     See ARM64.md. Doorstop and the launcher come from upstream unchanged.
     """
-    zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX)))
+    zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX, BEPINEX_SHA256)))
     zf.extractall(game)
 
     core = game / "BepInEx" / "core"
@@ -152,10 +169,12 @@ def install_loader(game: Path) -> None:
 def install(pack: str, extras: list[str], log=print) -> None:
     game = game_dir()
     bep = game / "BepInEx"
+    log(f"⏺ Resolving {pack}")
+    # Before anything is removed, so a wrong name or a dead network leaves the
+    # install that is already there.
+    deps = resolve(pack, extras)
     for d in ("plugins", "patchers", "core"):
         shutil.rmtree(bep / d, ignore_errors=True)
-    log(f"⏺ Resolving {pack}")
-    deps = resolve(pack, extras)
     log("⏺ Installing")
     for dep in deps:
         log(f"  ⎿  {dep}")

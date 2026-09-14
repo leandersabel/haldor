@@ -55,7 +55,8 @@ refuses. See `ARM64.md`.
 
 BepInEx comes from the official macOS build rather than the Windows
 `BepInExPack_Valheim`, whose bundled `libdoorstop_x64.dylib` is Intel-only. Its core is
-then replaced with the arm64 one in `bepinex-arm64/core`.
+then replaced with the arm64 one in `bepinex-arm64/core`. The download is checked against
+`BEPINEX_SHA256`, since a release asset can be swapped under a tag that does not move.
 
 Mod plugins are managed .NET and carry no native code. Their embedded Unity asset
 bundles declare build target 5, the canonical desktop-standalone value, which the macOS
