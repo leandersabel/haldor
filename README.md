@@ -68,12 +68,16 @@ player accepts.
 
 ## Known issues
 
-Mod-supplied shaders have no Metal variants, logged as `Desired shader compiler platform
-14 is not available in shader blob`. Custom content added by mods can render untextured.
-Vanilla assets are unaffected.
+A shader with no Metal variant is logged as `Desired shader compiler platform 14 is not
+available in shader blob`. Mod-supplied ones leave custom content untextured. Valheim's
+own tree-cut leaf particles ask `Standard` for transparency and get none, so felling a
+tree throws its leaves out as opaque black quads.
 
-`DrummerCraig/ShaderHelperForMac` remaps the affected materials at runtime and is
-installed as an extra. It does not reach every mod.
+`DrummerCraig/ShaderHelperForMac` remaps affected materials at runtime and is installed
+as an extra. It reaches neither of those on its own: its scan skips the largest mod DLLs,
+and it refuses a Valheim material on a Valheim shader unless a rule names the prefab the
+material sits under. `shaderfix` holds those rules, laid into
+`BepInEx/config/ShaderHelperForMac` on every install.
 
 ## Diagnosing a failed preload
 

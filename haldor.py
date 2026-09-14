@@ -139,11 +139,12 @@ def install_mod(dep: str, bep: Path) -> None:
 
 
 def install_loader(game: Path) -> None:
-    """Overlay the macOS build of BepInEx, then replace its core with the arm64 one.
+    """Everything the pack needs on top of itself to run on an Apple Silicon Mac.
 
-    Stock BepInEx bundles MonoMod 22, which patches code by asking for RWX memory.
-    Apple Silicon refuses that, so the core here is rebuilt against MonoMod 25.
-    See ARM64.md. Doorstop and the launcher come from upstream unchanged.
+    The macOS build of BepInEx, overlaid and then given the arm64 core: stock BepInEx
+    bundles MonoMod 22, which patches code by asking for RWX memory, and Apple Silicon
+    refuses that, so the core here is rebuilt against MonoMod 25. See ARM64.md.
+    Doorstop and the launcher come from upstream unchanged.
     """
     zf = zipfile.ZipFile(io.BytesIO(fetch(BEPINEX, BEPINEX_SHA256)))
     zf.extractall(game)
@@ -164,6 +165,14 @@ def install_loader(game: Path) -> None:
                   text, flags=re.M)
     script.write_text(text)
     script.chmod(0o755)
+
+    # ShaderHelperForMac repairs materials whose shader has no Metal variant. Its scan
+    # skips the largest mod DLLs, and it refuses a Valheim material on a Valheim shader
+    # unless a rule names the prefab it sits under. These files are those rules.
+    rules = game / "BepInEx" / "config" / "ShaderHelperForMac"
+    rules.mkdir(parents=True, exist_ok=True)
+    for rule in (HERE / "shaderfix").glob("*.txt"):
+        shutil.copy(rule, rules / rule.name)
 
 
 def install(pack: str, extras: list[str], log=print) -> None:

@@ -110,6 +110,36 @@ class Unpack(unittest.TestCase):
         self.assertFalse((self.game.parent / "evil.sh").exists())
 
 
+class Loader(unittest.TestCase):
+    """What the loader overlay lays down beyond the packages the pack names."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.game = Path(tmp.name)
+        # The launcher is the only file install_loader edits rather than writes.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("run_bepinex.sh", "executable_name=\"x\"\nexport ARCHPREFERENCE=\"\"\n")
+        patch = mock.patch.object(haldor, "fetch", return_value=buf.getvalue())
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_shader_rules_land_in_a_config_directory_nothing_has_made_yet(self):
+        haldor.install_loader(self.game)
+        dest = self.game / "BepInEx/config/ShaderHelperForMac"
+        shipped = sorted(p.name for p in (haldor.HERE / "shaderfix").glob("*.txt"))
+        self.assertTrue(shipped, "a rule file is what this ships")
+        self.assertEqual(sorted(p.name for p in dest.glob("*.txt")), shipped)
+
+    def test_the_launcher_runs_the_app_on_arm64_through_the_cecil_backend(self):
+        haldor.install_loader(self.game)
+        text = (self.game / "run_bepinex.sh").read_text()
+        self.assertIn('executable_name="valheim.app"', text)
+        self.assertIn('export ARCHPREFERENCE="arm64"', text)
+        self.assertIn('export MONOMOD_DMDType="cecil"', text)
+
+
 class Fetch(unittest.TestCase):
     """The cache holds bodies that cannot change, so what lands in it must be whole."""
 

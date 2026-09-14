@@ -1,0 +1,40 @@
+# Valheim binds every tree-cut leaf particle to Unity's Standard shader and asks it for
+# transparency. The Metal blob carries no transparent variant, so felling a tree throws
+# its leaves out as opaque black quads. The target is the shader Valheim's own
+# item_particle runs on: unlit, _MainTex driven, vertex-colour blended.
+#
+# The prefab list is what lets the rules fire. ShaderHelperForMac vetoes a Valheim
+# material on a Valheim shader unless it sits under a declared prefab root, and every
+# root below is a tree-cut effect.
+
+[prefab]
+vfx_beech_cut
+vfx_beech_small1_destroy
+vfx_beech_small2_destroy
+vfx_birch1_cut
+vfx_birch1_aut_cut
+vfx_birch2_cut
+vfx_birch2_aut_cut
+vfx_oak_cut
+vfx_swamptree_cut
+vfx_yggashoot_cut
+vfx_yggashoot_small1_destroy
+vfx_ashlandstreecut
+vfx_pinetreecut
+vfx_pinetreecut_dead
+vfx_pinetreecut_snow
+vfx_firetreecut
+vfx_firetreecut_dead
+vfx_firetreecut_dead_snow
+vfx_firetreecut_dead_abomination
+vfx_firetreecut_snow
+vfx_firetreecut_snow_small
+vfx_firetreecut_snow_FrostTrollDeath
+vfx_firetreecut_snow_FrostTrollThrow
+
+[useshader]
+mat:beech_particle       "Legacy Shaders/Particles/Alpha Blended"
+mat:birch_particle       "Legacy Shaders/Particles/Alpha Blended"
+mat:branch_particle      "Legacy Shaders/Particles/Alpha Blended"
+mat:branch_dead_particle "Legacy Shaders/Particles/Alpha Blended"
+mat:branch_particle_snow "Legacy Shaders/Particles/Alpha Blended"

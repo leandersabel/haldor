@@ -39,6 +39,7 @@ certs=$("$work/venv/bin/python" -c 'import certifi; print(certifi.where())')
 	--windowed --name Haldor --icon "$work/Haldor.icns" \
 	--osx-bundle-identifier io.github.leandersabel.haldor \
 	--add-data "$here/bepinex-arm64/core:bepinex-arm64/core" \
+	--add-data "$here/shaderfix:shaderfix" \
 	--add-data "$certs:certs" \
 	--distpath "$work/dist" --workpath "$work/build" --specpath "$work" \
 	"$here/gui.py"
