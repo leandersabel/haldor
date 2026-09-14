@@ -16,14 +16,14 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       - run: python3 -m unittest -v
 
   app:
     needs: test
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       - run: brew bundle
