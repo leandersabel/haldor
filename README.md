@@ -25,6 +25,10 @@ Install applies whatever the window shows, so editing the extras there covers bo
 and dropping a mod. The window is a dark terminal pane, set in MesloLGS NF where that is
 installed and Menlo otherwise. It needs the Python the `Brewfile` names: `brew bundle`.
 
+`python3 -m unittest` runs the tests, which need no network and no game: the resolver,
+the layouts a Thunderstore package arrives in, and the cache. CI runs them before it
+builds the app.
+
 ## The app
 
 [**Download Haldor.app**](https://github.com/leandersabel/haldor/releases/latest/download/Haldor.zip),
