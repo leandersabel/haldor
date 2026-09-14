@@ -37,7 +37,7 @@ class App(tk.Frame):
         master.option_add("*Frame.background", BG)
         master.option_add("*Label.background", BG)
         master.option_add("*Label.foreground", FG)
-        master.option_add("*Label.font", "{%s} 13" % self.family)
+        master.option_add("*Label.font", "{%s} -13" % self.family)
         super().__init__(master, bg=BG, padx=PAD, pady=14)
 
         self.messages: queue.Queue = queue.Queue()
@@ -82,7 +82,9 @@ class App(tk.Frame):
         self.pump()
 
     def font(self, size: int = 13, weight: str = "normal") -> tuple:
-        return self.family, size, weight
+        # Negative is pixels, and a macOS point is a pixel, so this matches the system
+        # font beside it. Tk reads a positive size as a point at 96dpi, a third larger.
+        return self.family, -size, weight
 
     # The window
 
