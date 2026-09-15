@@ -4,6 +4,8 @@ A Valheim mod loader for macOS, because Thunderstore Mod Manager and r2modman ha
 macOS build. Haldor resolves a Thunderstore modpack, lays it down next to `valheim.app`,
 and starts the game through Doorstop.
 
+![The Haldor window: the modpack and its extras above, the mods it laid down below](screenshot.png)
+
 ## Usage
 
     ./haldor.py install MahMods/Trollheim
