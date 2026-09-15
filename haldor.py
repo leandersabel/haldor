@@ -90,9 +90,14 @@ def split(dep: str) -> tuple[str, str]:
     return "/".join(parts), version
 
 
-def resolve(pack: str, extras: list[str]) -> list[str]:
-    """Expand a pack and its extras into a flat list of pinned dependencies."""
-    queue = latest(pack)["dependencies"] + [latest(e)["full_name"] for e in extras]
+def newest(pack: str) -> str:
+    """The version Thunderstore publishes for a pack right now."""
+    return latest(pack)["version_number"]
+
+
+def resolve(pack: dict, extras: list[str]) -> list[str]:
+    """Expand a pack's newest release and its extras into pinned dependencies."""
+    queue = pack["dependencies"] + [latest(e)["full_name"] for e in extras]
     seen, order = set(), []
     while queue:
         dep = queue.pop(0)
@@ -181,7 +186,8 @@ def install(pack: str, extras: list[str], log=print) -> None:
     log(f"⏺ Resolving {pack}")
     # Before anything is removed, so a wrong name or a dead network leaves the
     # install that is already there.
-    deps = resolve(pack, extras)
+    release = latest(pack)
+    deps = resolve(release, extras)
     for d in ("plugins", "patchers", "core"):
         shutil.rmtree(bep / d, ignore_errors=True)
     log("⏺ Installing")
@@ -189,13 +195,15 @@ def install(pack: str, extras: list[str], log=print) -> None:
         log(f"  ⎿  {dep}")
         install_mod(dep, bep)
     install_loader(game)
-    (bep / "haldor.json").write_text(
-        json.dumps({"pack": pack, "extras": extras, "mods": deps}, indent=2))
-    log(f"⏺ Installed into {game}")
+    (bep / "haldor.json").write_text(json.dumps(
+        {"pack": pack, "version": release["version_number"],
+         "extras": extras, "mods": deps}, indent=2))
+    log(f"⏺ Installed {pack} {release['version_number']} into {game}")
 
 
 def state() -> dict:
-    """What the last install recorded: the pack, its extras and the pinned mods."""
+    """What the last install recorded: the pack, its version, its extras and the
+    pinned mods."""
     path = game_dir() / "BepInEx/haldor.json"
     if not path.exists():
         raise NotInstalled("nothing installed yet")

@@ -55,28 +55,29 @@ class Resolve(unittest.TestCase):
         self.newest["p/Pack"] = "p-Pack-1.0.0"
         self.deps["p-Pack-1.0.0"] = ["a-Core-2.0.0", "a-Mod-1.0.0"]
         self.deps["a-Mod-1.0.0"] = ["a-Core-1.0.0"]
-        self.assertEqual(haldor.resolve("p/Pack", []),
+        self.assertEqual(haldor.resolve(haldor.latest("p/Pack"), []),
                          ["a-Core-2.0.0", "a-Mod-1.0.0"])
 
     def test_an_extra_comes_after_the_pack(self):
         self.newest["p/Pack"] = "p-Pack-1.0.0"
         self.newest["x/Extra"] = "x-Extra-3.0.0"
         self.deps["p-Pack-1.0.0"] = ["a-Core-2.0.0"]
-        self.assertEqual(haldor.resolve("p/Pack", ["x/Extra"]),
+        self.assertEqual(haldor.resolve(haldor.latest("p/Pack"), ["x/Extra"]),
                          ["a-Core-2.0.0", "x-Extra-3.0.0"])
 
     def test_an_extra_the_pack_already_pins_does_not_move_the_version(self):
         self.newest["p/Pack"] = "p-Pack-1.0.0"
         self.newest["a/Core"] = "a-Core-9.0.0"
         self.deps["p-Pack-1.0.0"] = ["a-Core-2.0.0"]
-        self.assertEqual(haldor.resolve("p/Pack", ["a/Core"]), ["a-Core-2.0.0"])
+        self.assertEqual(haldor.resolve(haldor.latest("p/Pack"), ["a/Core"]),
+                         ["a-Core-2.0.0"])
 
     def test_a_cycle_terminates(self):
         self.newest["p/Pack"] = "p-Pack-1.0.0"
         self.deps["p-Pack-1.0.0"] = ["a-One-1.0.0"]
         self.deps["a-One-1.0.0"] = ["a-Two-1.0.0"]
         self.deps["a-Two-1.0.0"] = ["a-One-1.0.0"]
-        self.assertEqual(haldor.resolve("p/Pack", []),
+        self.assertEqual(haldor.resolve(haldor.latest("p/Pack"), []),
                          ["a-One-1.0.0", "a-Two-1.0.0"])
 
 

@@ -47,7 +47,9 @@ class App(tk.Frame):
         self.working = False
         self.active = False
         self.buttons: list = []
+        self.published = ""
         self.modpack = tk.StringVar()
+        self.version = tk.StringVar()
         self.where = tk.StringVar()
         self.status = tk.StringVar()
 
@@ -101,6 +103,11 @@ class App(tk.Frame):
 
     def fields(self) -> None:
         box = self.prompt("modpack")
+        # Packed before the field, which expands into whatever is left over.
+        self.button(box.master, "refresh", CYAN, self.do_refresh,
+                    side="right", padx=(14, 0), before=box)
+        tk.Label(box.master, textvariable=self.version, fg=DIM).pack(
+            side="right", before=box)
         self.entry = tk.Entry(box, textvariable=self.modpack, font=self.font(),
                               bg=BG, fg=BRIGHT, relief="flat", highlightthickness=0,
                               insertbackground=BLUE, selectbackground=LINE,
@@ -123,11 +130,11 @@ class App(tk.Frame):
         self.button(bar, "install", BLUE, self.do_install)
         self.button(bar, "play", CYAN, self.do_play)
 
-    def button(self, bar: tk.Frame, text: str, color: str, command) -> None:
+    def button(self, bar: tk.Frame, text: str, color: str, command, **pack) -> None:
         """A bracketed word. Tk's own button takes no color on macOS."""
         button = tk.Label(bar, text=f"[ {text} ]", fg=color, cursor="pointinghand",
                           font=self.font(weight="bold"))
-        button.pack(side="left", padx=(0, 14))
+        button.pack(**{"side": "left", "padx": (0, 14), **pack})
         button.bind("<Button-1>", lambda e: None if self.working else command())
         button.bind("<Enter>", lambda e: self.light(self.active))
         button.bind("<Leave>", lambda e: self.light(self.active))
@@ -181,9 +188,21 @@ class App(tk.Frame):
         except haldor.NotInstalled:
             return self.busy(False, "nothing installed yet")
         self.modpack.set(installed["pack"])
+        self.show_version()
         self.extras.insert("1.0", "\n".join(installed.get("extras", [])))
         self.say("⏺ Installed\n" + "".join(f"  ⎿  {mod}\n" for mod in installed["mods"]))
         self.busy(False, "ready")
+
+    def show_version(self) -> None:
+        """What is installed, and what a refresh found published beyond it."""
+        try:
+            here = haldor.state().get("version", "")
+        except haldor.HaldorError:
+            here = ""
+        if self.published and self.published != here:
+            self.version.set(f"{here} → {self.published}" if here else self.published)
+        else:
+            self.version.set(here)
 
     # What the buttons do
 
@@ -195,7 +214,20 @@ class App(tk.Frame):
             return self.status.set("name a modpack, such as MahMods/Trollheim")
         # Read the list here. The worker thread must not touch a widget.
         extras = self.extras.get("1.0", "end").split()
-        self.work(lambda log: haldor.install(pack, extras, log))
+        self.clear()
+        self.work(lambda log: haldor.install(pack, extras, log), "installing…")
+
+    def do_refresh(self) -> None:
+        """What Thunderstore publishes for the pack now, against what is laid down."""
+        pack = self.modpack.get().strip()
+        if not pack:
+            return self.status.set("name a modpack, such as MahMods/Trollheim")
+
+        def check(log) -> None:
+            self.published = haldor.newest(pack)
+            log(f"⏺ {pack} {self.published} is published")
+
+        self.work(check, "checking…")
 
     def do_play(self) -> None:
         if self.playing():
@@ -222,13 +254,10 @@ class App(tk.Frame):
 
     # Running a job without freezing the window
 
-    def work(self, job) -> None:
-        """Run the job off the main thread, the lines it logs replacing the log."""
+    def work(self, job, status: str) -> None:
+        """Run the job off the main thread, the lines it logs going to the log."""
         self.failure = None
-        self.busy(True, "installing…")
-        self.console.configure(state="normal")
-        self.console.delete("1.0", "end")
-        self.console.configure(state="disabled")
+        self.busy(True, status)
 
         def run() -> None:
             def line(text: str) -> None:
@@ -254,6 +283,7 @@ class App(tk.Frame):
             except queue.Empty:
                 break
             if message is None:
+                self.show_version()
                 self.busy(False, self.failure or "ready")
             else:
                 self.say(message)
@@ -266,6 +296,11 @@ class App(tk.Frame):
         self.light(self.active)
         self.dot.configure(fg=AMBER if self.failure else CYAN if working else BLUE)
         self.status.set(status)
+
+    def clear(self) -> None:
+        self.console.configure(state="normal")
+        self.console.delete("1.0", "end")
+        self.console.configure(state="disabled")
 
     def say(self, text: str) -> None:
         """Write to the log, a step line and its details telling themselves apart."""
